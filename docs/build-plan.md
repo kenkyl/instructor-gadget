@@ -20,7 +20,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 |---|---|---|
 | CP0 | Foundations: repo, Postgres + Redis 8, FastAPI + Next.js wiring, CI, data model + migrations + seed, login + Redis sessions + dashboard cache, skill registry + `diagnose` scaffold | ✅ merged |
 | CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ✅ merged (PR #2) |
-| CP2 | J2: learn, check, adapt | next (branch `cp2/learn-check-adapt`) |
+| CP2 | J2: learn, check, adapt | ⏳ in progress (branch `cp2/learn-check-adapt`) |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | |
 | CP4 | J3: org course grounded in docs | |
 | CP5 | Dashboard + eval harness | |

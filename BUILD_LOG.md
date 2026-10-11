@@ -7,6 +7,8 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 
 ---
 
+## CP2 notes (in progress; folded into the CP2 entry when CP2 closes)
+
 ## CP1: Create a course (Sun 2026-10-11, PR #2)
 
 **What we built**
