@@ -33,9 +33,17 @@ Run whichever of these exist (check the `Makefile`):
 - Keep the CLAUDE.md commands table current.
 
 ## 4. Commit and push
+- Work happens on the CP branch (`cpN/<slug>`), never directly on `main`.
 - Use Conventional Commits, e.g. `feat(agent): diagnose probe + llm_calls logging (PC1.1)`.
 - End the message with the co-author line from the session's attribution instructions.
-- `git push`. At CP6 also run `git tag v0.1.0 && git push --tags`.
+- `git push`, then wait for CI on the draft PR (`gh pr checks --watch`).
+- **At a CP boundary:**
+  1. Update the PR description: what was built, how to verify, decisions.
+  2. `gh pr ready`.
+  3. Once CI is green: `gh pr merge --merge --delete-branch`.
+  4. `git switch main && git pull`.
+  5. Create the next CP branch and open its draft PR.
+- At CP6, after merging, also run `git tag v0.1.0 && git push --tags`.
 
 ## 5. Post the pair-checkpoint summary, then wait for "go"
 - **Built:** 3–5 bullets.

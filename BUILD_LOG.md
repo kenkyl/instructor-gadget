@@ -1,7 +1,7 @@
 # Build log
 
 > **Current status:** CP0 in progress. PC0.1–PC0.3 done (foundations, data stores, FastAPI + Next.js wired with typed contract and CI).
-> **Next:** PC0.4: SQLAlchemy async models, first Alembic migration, seed orgs and users.
+> **Branch:** `cp0/data-model-auth` (draft PR open). **Next:** PC0.4: SQLAlchemy async models, first Alembic migration, seed orgs and users.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
