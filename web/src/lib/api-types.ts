@@ -126,10 +126,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create */
+        post: operations["create_api_courses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get */
+        get: operations["get_api_courses__course_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe
+         * @description Generate the diagnostic questions (idempotent: a second call returns the same ones).
+         */
+        post: operations["probe_api_courses__course_id__probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/assess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assess
+         * @description Assess the probe answers (once; afterwards the result is returned unchanged).
+         */
+        post: operations["assess_api_courses__course_id__assess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Map Concepts
+         * @description Generate the concept map (once; afterwards the same map is returned).
+         */
+        post: operations["map_concepts_api_courses__course_id__map_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/map/concepts/{concept_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Map Concept
+         * @description Cut a concept before accepting; its dependents inherit its prereqs (ADR-0017).
+         */
+        delete: operations["remove_map_concept_api_courses__course_id__map_concepts__concept_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept
+         * @description Accept the map: creates the enrollment, plan v1 and progress rows (idempotent).
+         */
+        post: operations["accept_api_courses__course_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswersIn
+         * @description {question_id: answer}. Blank is allowed and counts as "I don't know" (assess.md).
+         */
+        AnswersIn: {
+            /** Answers */
+            answers: {
+                [key: string]: string;
+            };
+        };
+        /** AssessOutput */
+        AssessOutput: {
+            /**
+             * Claimed Level
+             * @enum {string}
+             */
+            claimed_level: "novice" | "intermediate" | "strong" | "expert";
+            /**
+             * Assessed Level
+             * @enum {string}
+             */
+            assessed_level: "novice" | "intermediate" | "strong" | "expert";
+            /** Confidence */
+            confidence: number;
+            /** Evidence */
+            evidence: components["schemas"]["Evidence"][];
+            /** Gaps */
+            gaps: string[];
+            /**
+             * Adjustment Message
+             * @description Required when assessed_level != claimed_level; else null
+             */
+            adjustment_message?: string | null;
+        };
         /** CallInfo */
         CallInfo: {
             /** Name */
@@ -144,6 +312,124 @@ export interface components {
             /** Prompt Version */
             prompt_version: string;
         };
+        /** Concept */
+        Concept: {
+            /**
+             * Id
+             * @description Short kebab-case slug
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Mastery Statement
+             * @description Observable outcome, starting "You can …"
+             */
+            mastery_statement: string;
+            /**
+             * Objective Level
+             * @description Bloom level of the mastery statement's verb
+             * @enum {string}
+             */
+            objective_level: "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create";
+            /**
+             * Prereqs
+             * @description Ids of direct prerequisites in this map
+             */
+            prereqs: string[];
+            /**
+             * Est Minutes
+             * @description Lesson + quiz time
+             */
+            est_minutes: number;
+            /**
+             * Concept Type
+             * @enum {string}
+             */
+            concept_type: "algorithm" | "systems" | "math" | "syntax" | "api" | "conceptual";
+        };
+        /**
+         * ConceptMap
+         * @description Stored in courses.template_plan and plan_versions.plan. These graph rules hold for
+         *     every stored map, including after the learner cuts concepts (PC1.4).
+         */
+        ConceptMap: {
+            /** Concepts */
+            concepts: components["schemas"]["Concept"][];
+            /**
+             * Sequence
+             * @description Every concept id once, each after its prereqs
+             */
+            sequence: string[];
+            /**
+             * Sequence Rationale
+             * @description Why this order, written to the learner
+             */
+            sequence_rationale: string;
+        };
+        /**
+         * CourseConfig
+         * @description Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration.
+         */
+        CourseConfig: {
+            /** Topic */
+            topic: string;
+            /**
+             * Target Hours
+             * @default 3
+             */
+            target_hours: number;
+            /**
+             * Target Level
+             * @default intermediate
+             * @enum {string}
+             */
+            target_level: "beginner" | "intermediate" | "advanced" | "expert";
+            /**
+             * Self Level
+             * @default intermediate
+             * @enum {string}
+             */
+            self_level: "novice" | "intermediate" | "strong" | "expert";
+            /** Formats */
+            formats?: string[];
+        };
+        /** CourseDetail */
+        CourseDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            status: components["schemas"]["CourseStatus"];
+            config: components["schemas"]["CourseConfig"];
+            mission: components["schemas"]["Mission"];
+            /** Questions */
+            questions?: components["schemas"]["ProbeQuestionView"][];
+            /** Answers */
+            answers?: {
+                [key: string]: string;
+            };
+            assessment?: components["schemas"]["AssessOutput"] | null;
+            concept_map?: components["schemas"]["ConceptMap"] | null;
+            /** Enrollment Id */
+            enrollment_id?: string | null;
+        };
+        /**
+         * CourseIntake
+         * @description The intake form (spec §4.1). Defaults live in CourseConfig/Mission and the form.
+         */
+        CourseIntake: {
+            config: components["schemas"]["CourseConfig"];
+            mission: components["schemas"]["Mission"];
+        };
+        /**
+         * CourseStatus
+         * @enum {string}
+         */
+        CourseStatus: "draft" | "probed" | "assessed" | "mapped" | "active";
         /** CurrentUser */
         CurrentUser: {
             /**
@@ -207,6 +493,21 @@ export interface components {
              */
             served_from: "cache" | "db";
         };
+        /** Evidence */
+        Evidence: {
+            /** Question Id */
+            question_id: string;
+            /**
+             * Observation
+             * @description What the answer showed or failed to show
+             */
+            observation: string;
+            /**
+             * Points To
+             * @enum {string}
+             */
+            points_to: "novice" | "intermediate" | "strong" | "expert";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -243,6 +544,37 @@ export interface components {
         LoginRequest: {
             /** Username */
             username: string;
+        };
+        /**
+         * Mission
+         * @description Stored in courses.mission (JSONB): what the learner is really after (spec §4.1).
+         */
+        Mission: {
+            /** Goal */
+            goal: string;
+            /** Expert Means */
+            expert_means: string;
+            /**
+             * Mode
+             * @default foundation
+             * @enum {string}
+             */
+            mode: "cram" | "foundation";
+            /** Deadline */
+            deadline?: string | null;
+            /** Analogy Domain */
+            analogy_domain?: string | null;
+        };
+        /**
+         * ProbeQuestionView
+         * @description What the learner sees. `targets_concept` stays server-side: naming the concept being
+         *     checked is a hint (spec §4.2: no hints).
+         */
+        ProbeQuestionView: {
+            /** Id */
+            id: string;
+            /** Prompt */
+            prompt: string;
         };
         /** SeededUser */
         SeededUser: {
@@ -466,6 +798,244 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkillInfo"][];
+                };
+            };
+        };
+    };
+    create_api_courses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseIntake"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_api_courses__course_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_api_courses__course_id__probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assess_api_courses__course_id__assess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswersIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    map_concepts_api_courses__course_id__map_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_map_concept_api_courses__course_id__map_concepts__concept_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                concept_id: string;
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_api_courses__course_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,10 +1,10 @@
 ---
 name: diagnose
-version: 0.1.0
+version: 0.2.0
 description: Diagnostic probe and level assessment (learning-design §4.1–4.3).
 calls:
-  probe: { cache: never, stream: false, max_tokens: 2000 }
-  assess: { cache: never, stream: false, max_tokens: 3000 }
+  probe: { cache: never, stream: false, max_tokens: 8000, effort: medium }
+  assess: { cache: never, stream: false, max_tokens: 8000, effort: medium }
 ---
 
 You find out where a learner really is before a course is planned.

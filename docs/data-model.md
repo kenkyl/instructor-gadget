@@ -11,6 +11,7 @@ Instructor stores every piece of data it uses in one of three places. This doc c
 **Status legend:**
 - ✅ = the schema exists (PC0.4)
 - 🔜 PCx.y = the pair checkpoint where the app starts writing or reading it
+- ✔︎ PCx.y = live since that pair checkpoint
 
 ---
 
@@ -362,7 +363,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | `config` | jsonb | no | `CourseConfig` (§5.1): the intake knobs |
 | `mission` | jsonb | no | `Mission` (§5.1): goal, what "expert" means, mode, analogy domain |
 | `status` | varchar(32) | no | `draft` → `probed` → `assessed` → `mapped` → `active` |
-| `template_plan` | jsonb | yes | Org courses only: the admin-accepted `ConceptMap`, copied into each learner's enrollment |
+| `template_plan` | jsonb | yes | The course's base `ConceptMap` (ADR-0016): proposed while `mapped`, final once accepted; each enrollment copies it into plan v1. For org courses, the admin-accepted map |
 | `doc_ids` | jsonb | no | Org doc ids used for grounding (default `[]`) |
 | `doc_set_hash` | varchar(64) | yes | Hash of the grounding doc set; part of the semantic cache bucket |
 | `created_at`, `updated_at` | timestamptz | no | `updated_at` is set on every update |
@@ -371,8 +372,8 @@ The **shared definition** of a course: what it's about and how it's configured. 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Intake form submitted (🔜 PC1.1) | Insert with `status=draft` |
-| Update | After probe, assessment, map, and accept (🔜 PC1.1–1.4) | `status` advances; `template_plan` is set when an admin accepts (🔜 PC4.3) |
+| Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner |
+| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, once only), and accept (✔︎ PC1.4: → `active`) | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`) and edited before accept (✔︎ PC1.4, `DELETE /api/courses/{id}/map/concepts/{concept_id}`: dependents are rewired, ADR-0017); read-only once `active` |
 | Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; list by owner or org |
 
 ```json
@@ -405,7 +406,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Personal course accepted (🔜 PC1.4); admin assigns an org course (🔜 PC4.3) | Insert, then insert plan v1 |
+| Write | Personal course accepted (✔︎ PC1.4, `POST /api/courses/{id}/accept`); admin assigns an org course (🔜 PC4.3) | Insert (`source=owner`, `current_plan_version=1`), then plan v1 and `concept_progress`, in **one transaction**; then `invalidate_dashboard` |
 | Update | Every plan change (`current_plan_version`); course completion (`status`, `completed_at`) | Same transaction as the `plan_versions` insert |
 | Read | Dashboard (active and complete, badges), every learning-loop request | By id; list by user |
 
@@ -423,7 +424,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | `course_id` | uuid | no | FK → courses |
 | `user_id` | uuid | no | FK → users |
 | `probe` | jsonb | no | `ProbeOutput` (§5.3) |
-| `answers` | jsonb | yes | `{question_id: free-text answer}` |
+| `answers` | jsonb | yes | `{question_id: free-text answer}`, one key per probe question (trimmed; blank = "I don't know"). The model receives them as an ordered list (`AssessInput.answers`) |
 | `result` | jsonb | yes | `AssessOutput` (§5.3) |
 | `assessed_level` | varchar(32) | yes | Copied from the result for easy querying |
 | `confidence` | float | yes | 0–1 |
@@ -431,8 +432,8 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 
 | Operation | When | How |
 |---|---|---|
-| Write | Probe generated (🔜 PC1.1) | Insert with `probe` |
-| Update | Answers submitted and assessed (🔜 PC1.2) | Set `answers`, `result`, `assessed_level`, `confidence` |
+| Write | Probe generated (✔︎ PC1.1, `POST /api/courses/{id}/probe`) | Insert with `probe`. Idempotent: if one exists for `(course_id, user_id)` it's returned and no LLM call is made. The API never returns `targets_concept` to the learner (it would be a hint) |
+| Update | Answers submitted and assessed (✔︎ PC1.2, `POST /api/courses/{id}/assess`) | Set `answers`, `result`, `assessed_level`, `confidence`; course `probed` → `assessed`. **Once only** (ADR-0014): a resubmit returns the stored result, and answers must cover exactly the probe's question ids (else 422) |
 | Read | Concept map generation (assessment shapes the map); course page shows the level adjustment | Latest by `(course_id, user_id)` |
 
 ```json
@@ -459,13 +460,13 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | `plan` | jsonb | no | The full `ConceptMap` at this version (§5.2) |
 | `diff` | jsonb | yes | `PlanDiff` against the previous version (§5.2); null for v1 |
 | `trigger` | varchar(32) | no | `diagnosis` \| `assignment` \| `quiz_result` \| `prereq_override` \| `user_request` (P2 chat) |
-| `reason` | text | no | Written by `remediate.explain_change`; names the score and the misconception |
+| `reason` | text | no | v1: the map's `sequence_rationale`. Later versions: written by `remediate.explain_change`, naming the score and the misconception |
 | `rule` | varchar(64) | yes | Which `pedagogy.adapt` rule fired, e.g. `insert_remediation` |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Accept (v1, `diagnosis`); org assignment (v1, `assignment`); quiz-driven adaptation; prerequisite override; P2 chat (`user_request`) | Insert-only, in the same transaction as the `enrollments.current_plan_version` update |
+| Write | Accept (✔︎ PC1.4: v1, `diagnosis`, the accepted map); org assignment (v1, `assignment`); quiz-driven adaptation; prerequisite override; P2 chat (`user_request`) | Insert-only, in the same transaction as the `enrollments.current_plan_version` update |
 | Update | Never | Versions are immutable |
 | Read | Learning loop (current version); plan history and diff UI (🔜 PC2.5) | Latest version, or a specific one |
 
@@ -497,7 +498,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 
 | Operation | When | How |
 |---|---|---|
-| Write | Plan accepted or assigned: one row per concept (`locked`, or `unlocked` if it has no prereqs) | Bulk insert |
+| Write | Plan accepted (✔︎ PC1.4) or assigned (🔜 PC4.3): one row per concept (`locked`, or `unlocked` if it has no prereqs: `pedagogy.initially_unlocked`) | Bulk insert, same transaction as the enrollment |
 | Update | Quiz graded (🔜 PC2.4–2.5): `mastery`, `band`, `last_score`, `attempts`, `fsrs_card`, `due`; dependents unlock when every prereq is solid or better | Values computed by the pure functions in `pedagogy.py`; the service writes them |
 | Read | Unlock gate before opening a concept; dashboard mastery bands and due count; quiz distractor targeting | By enrollment; `due <= now()` for the review count |
 
@@ -676,7 +677,7 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | `id` | uuid | no | PK |
 | `course_id` / `enrollment_id` / `user_id` | uuid | yes | Context (FKs) |
 | `skill`, `call` | varchar(64) | no | e.g. `teach-concept` / `teach` |
-| `model` | varchar(64) | no | e.g. `claude-sonnet-5-5` |
+| `model` | varchar(64) | no | The model that **served** the request, e.g. `claude-sonnet-5-5`; differs from the configured model after a refusal fallback (ADR-0013) |
 | `prompt_version` | varchar(128) | no | `name@semver+sha8`; changes whenever the prompt files change |
 | `cache_result` | varchar(32) | no | `miss` \| `exact_hit` \| `semantic_hit` \| `bypass` |
 | `similarity` | float | yes | Semantic hits only |
@@ -686,13 +687,13 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | `est_cost_usd` | numeric(10,6) | no | 0 on a hit |
 | `saved_cost_usd`, `saved_latency_ms` | numeric / int | no | On a hit: the original generation's cost and latency, so savings are measured, not estimated |
 | `status` | varchar(32) | no | `ok` \| `error` |
-| `error` | text | yes | Validation or API error (after one retry) |
+| `error` | text | yes | Why this attempt failed: `invalid output:` + the Pydantic errors, `refusal (<category>)`, `hit max_tokens`, or the API error class |
 | `prompt_excerpt`, `response_excerpt` | text | yes | Truncated, for the trace page |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Every call through the LLM client wrapper (🔜 PC1.1), and every cache lookup result | Insert-only |
+| Write | Every API request through the LLM client wrapper (✔︎ PC1.1), and every cache lookup result (🔜 CP2/CP3) | Insert-only, **one row per API request**: a call that is retried after a validation error writes two rows. Written in its own transaction (`DbCallSink`), so the row survives a failed request. Never-cached skills log `cache_result=bypass` |
 | Read | Instructor trace page and cache impact tile (🔜 PC3.3): hit rate, calls avoided, $ and seconds saved | By course, by time window |
 
 | skill / call | cache_result | similarity | tokens in/out | latency | cost | saved |
@@ -711,7 +712,7 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 
 | Model | Field | Type | Default | Meaning |
 |---|---|---|---|---|
-| CourseConfig | `topic` | str | (required) | What to learn |
+| CourseConfig | `topic` | str (2–300 chars) | (required) | What to learn; also the course title |
 | | `target_hours` | float | 3 | The plan must fit within ±15% |
 | | `target_level` | beginner \| intermediate \| advanced \| expert | intermediate | Depth |
 | | `self_level` | novice \| intermediate \| strong \| expert | intermediate | Confirmed or overridden by the probe |
@@ -733,10 +734,10 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | | `prereqs` | list[str] | Must reference known ids; no cycles (checked in `plan.py`) |
 | | `est_minutes` | int (5–120) | Total within ±15% of `target_hours` |
 | | `concept_type` | algorithm \| systems \| math \| syntax \| api \| conceptual | Determines the prototype style |
-| | `cites` | list[{doc, section}] | Grounded courses only |
-| | `kind` | core \| remediation | Set by code, not the model |
-| ConceptMap | `concepts` | list[Concept] (6–20) | |
-| | `sequence` | list[str] | A dependency-respecting order |
+| | `cites` | list[{doc, section}] | Grounded courses only (🔜 CP4) |
+| | `kind` | core \| remediation | Set by code, not the model (🔜 PC2.5; absent means core) |
+| ConceptMap | `concepts` | list[Concept] (1–20 stored; **6–12 when generated**, `MapOutput`) | Ids unique kebab-case slugs. Defined in `agent/types.py` (the skill folder isn't importable) |
+| | `sequence` | list[str] | Every concept id once, each after its prereqs (validated in `plan.py`) |
 | | `sequence_rationale` | str | Shown to the learner |
 | PlanDiff | `added` / `removed` | list[Concept] / list[str] | |
 | | `prereq_changes` | list[{concept_id, added[], removed[]}] | |

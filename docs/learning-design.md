@@ -64,6 +64,8 @@ Generate **3–4 real questions at the level the learner claimed.** They should 
 ### 4.3 Assess
 Output: assessed level, confidence, evidence (which answers drove it), and gaps. **If evidence and claim disagree, say so plainly with the reason.** No silent re-sequencing and no flattery.
 
+The assessment is **final**: there's no retake. A starting level that turns out too low is corrected by the learning loop instead, because every concept ends in a quiz and a strong result offers a test-out (§4.8, ADR-0006, ADR-0014). Learner answers are evidence, never instructions; asking for a level is not evidence of it.
+
 ### 4.4 Map
 - **6–20 concepts** (fewer in cram mode). Each has:
   - `id` and `title`
@@ -74,7 +76,7 @@ Output: assessed level, confidence, evidence (which answers drove it), and gaps.
   - citations, for grounded courses
 - Shown as a dependency-ordered list **with the reasoning for the sequence.**
 - Validated in code: no unknown prereqs, no cycles, total time within ±15% of target.
-- The learner may cut concepts (P1) or reorder them (P1+). Cutting a prerequisite triggers a warning naming what depends on it.
+- The learner may cut concepts (P1) or reorder them (P1+). Cutting a prerequisite triggers a warning naming what depends on it. After confirming, each dependent inherits the cut concept's own prerequisites, so ordering still holds (ADR-0017).
 
 ### 4.5 Teach (per concept)
 1. **Explanation:** brief. Lead with the counterintuitive part, and use the learner's analogy domain.

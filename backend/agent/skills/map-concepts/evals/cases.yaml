@@ -1,0 +1,30 @@
+# Eval cases for map-concepts. Run by `make evals` (CP5); these need the live model.
+# Graph validity (unknown prereqs, cycles, order, time) is also enforced by validators on every call.
+
+map:
+  - id: novice-foundation-3h
+    input:
+      config: { topic: "Incident investigation for on-call engineers", self_level: intermediate,
+                target_level: intermediate, target_hours: 3 }
+      mission: { goal: "Be ready for my first on-call rotation",
+                 expert_means: "I can lead an incident without escalating for basics", mode: foundation }
+      assessed_level: novice
+      gaps: ["saturation vs. utilization", "liveness vs. readiness probes", "connection pool limits"]
+      target_minutes: 180
+    assert:
+      - "6 <= len(output.concepts) <= 12"
+      - "153 <= output.total_minutes() <= 207"
+      - "the first three concepts in output.sequence include at least one assessment gap (LLM judge)"
+
+  - id: cram-is-smaller
+    input:
+      config: { topic: "Incident investigation for on-call engineers", self_level: intermediate,
+                target_level: intermediate, target_hours: 1.5 }
+      mission: { goal: "First on-call shift is tomorrow", expert_means: "I don't panic and I know what to check",
+                 mode: cram }
+      assessed_level: intermediate
+      gaps: ["connection pool limits"]
+      target_minutes: 90
+    assert:
+      - "6 <= len(output.concepts) <= 8"
+      - "76 <= output.total_minutes() <= 103"

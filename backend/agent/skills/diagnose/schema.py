@@ -2,7 +2,7 @@
 
 from typing import Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, model_validator
 
 from agent.types import CourseConfig, Level, Mission
 
@@ -63,9 +63,28 @@ class AssessOutput(BaseModel):
     @model_validator(mode="after")
     def explain_adjustments(self) -> Self:
         # Spec §4.3: never re-level silently. A validation error here makes the LLM wrapper
-        # retry once with this message (PC1.1).
+        # retry once with this message (ADR-0013).
         if self.assessed_level != self.claimed_level and not self.adjustment_message:
             raise ValueError("adjustment_message is required when assessed_level != claimed_level")
+        return self
+
+    @model_validator(mode="after")
+    def consistent_with_input(self, info: ValidationInfo) -> Self:
+        # The LLM wrapper passes the call's input as validation context. Without it (e.g.
+        # reading a stored result back from JSONB) these checks are skipped.
+        inp = (info.context or {}).get("input")
+        if not isinstance(inp, AssessInput):
+            return self
+        claimed = inp.config.self_level
+        if self.claimed_level != claimed:
+            # Otherwise the adjustment rule above would compare against the wrong claim.
+            raise ValueError(
+                f"claimed_level must be '{claimed}' (config.self_level), not '{self.claimed_level}'"
+            )
+        known = {q.id for q in inp.probe.questions}
+        unknown = sorted({e.question_id for e in self.evidence} - known)
+        if unknown:
+            raise ValueError(f"evidence cites unknown question ids {unknown}; use {sorted(known)}")
         return self
 
 

@@ -42,8 +42,8 @@ seed: ## Seed the sample org and users (idempotent)
 	cd backend && uv run python -m seed.seed
 
 # --- app processes (native, hot reload) --------------------------------------
-api: ## Run FastAPI on :8000 with reload
-	cd backend && uv run fastapi dev app/main.py --port 8000
+api: ## Run FastAPI on :8000; reloads on .py AND skill prompt (.md/.yaml) edits
+	cd backend && uv run uvicorn app.main:app --port 8000 --reload --reload-include '*.md' --reload-include '*.yaml'
 
 web: ## Run Next.js on :3000
 	cd web && npm run dev

@@ -169,3 +169,61 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 **Consequences:** One more dev dependency (pyright). Static coverage for our own and typed libraries, runtime coverage for redis-py on any tested path.
 **One-liner:** Catch the classic async bug statically where the types allow, and at test time where they don't.
 
+
+## ADR-0013: Structured outputs (not forced tool use), validated by our own wrapper
+**Context:** The plan said "structured output via forced tool use". Current models (Sonnet 5.5, our default, and Opus 5.5) reject forced `tool_choice` (`any`/`tool`) with a 400. The SDK's `messages.parse()` raises on invalid output, which loses the raw text and token usage that the retry and `llm_calls` need.
+**Decision:**
+- `agent/llm.py` calls `beta.messages.create` with `output_config.format` = a JSON schema built from the call's Pydantic output model (`anthropic.transform_schema`), then validates the text itself with `model_validate_json`, including model validators such as "an adjusted level needs an explanation".
+- On a validation error it retries once: the model's reply goes back unchanged (thinking blocks included), followed by the errors rendered through `_shared/retry.md`. Refusals and `max_tokens` truncation are not retried.
+- Every API request is one `llm_calls` row (a retried call is two), written in its own transaction through a `CallSink` protocol, so `agent/` never imports `app/` and the log survives a failed request.
+- Server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) on models that support it; the log records the model that actually served the request.
+- Per-call `effort` and `max_tokens` live in the skill's `SKILL.md` frontmatter. Thinking tokens count toward `max_tokens`, so the default is 8000.
+**Alternatives:**
+- Forced tool use: a 400 on current models.
+- `messages.parse()`: less code, but there's nothing to log or feed back when validation fails.
+- `tool_choice: auto` + `strict: true`: the model may still answer in text, so it adds a failure mode for no gain.
+**Consequences:**
+- JSON-schema keywords the API can't enforce (`maxItems: 4`, `minimum`) are moved into descriptions by `transform_schema`. Pydantic enforces them, and the retry absorbs the rare miss.
+- The cost of a failed attempt is visible in the trace instead of hidden.
+- The fallback beta is Claude API only; on Bedrock or Vertex it would need the SDK's client-side middleware.
+**One-liner:** The API guarantees the JSON shape, Pydantic guarantees the meaning, and every attempt (good or bad) lands in the trace.
+
+## ADR-0014: The diagnostic assessment is final; quizzes correct a wrong start
+**Context:** After seeing their assessed level, a learner could resubmit better-worded answers until the level came out higher. That would turn the diagnosis back into a self-report, the thing §4.2 says is unreliable.
+**Decision:**
+- One assessment per course and learner. Resubmitting returns the stored result unchanged.
+- A start that turns out too low is corrected by the learning loop, not by a retake: every concept ends in a quiz, and a strong result offers a test-out of the next concept (ADR-0006).
+- `assess.md` tells the model not to promise a reassessment, and to describe the quiz and test-out path instead. A live run showed it promising "I can reassess and move you up".
+**Alternatives:**
+- Allow one retake: gameable, and it doubles the uncached `assess` calls.
+- Silently drop the level and let quizzes sort it out: breaks "never re-level silently" (§4.3).
+**Consequences:** The diagnosis keeps its meaning, and a learner who under-performs on the probe pays a few extra test-outs, not a wrong course.
+**One-liner:** You can't re-roll the diagnosis, but the quizzes will move you up if it started you too low.
+
+## ADR-0015: The call's input is Pydantic validation context
+**Context:** Some output rules depend on the request. `assess` echoes `claimed_level`; if it echoes the wrong value, the "an adjusted level needs an explanation" rule compares against the wrong claim. Evidence must also cite real question ids. Self-contained model validators can't see the input.
+**Decision:** The LLM wrapper validates with `model_validate_json(text, context={"input": payload})`. Output validators read `info.context["input"]` and raise on a mismatch, which feeds the normal one-retry path (ADR-0013). Without context (reading JSONB back), those checks are skipped.
+**Alternatives:**
+- Overwrite `claimed_level` from the input after validation: it hides the model's mistake, and its other fields (the message) may be built on the wrong claim.
+- Check in the service after the call: no retry, so a fixable error becomes a 502.
+**Consequences:** Request-aware rules stay next to the schema they protect, are unit-testable, and get a retry for free. `map-concepts` can use the same hook (e.g. concept ids referenced by gaps).
+**One-liner:** The output is checked against the question it was answering, and a mismatch earns one retry instead of a silent fix.
+
+## ADR-0016: `courses.template_plan` holds every course's base map
+**Context:** A generated concept map needs a home before the learner accepts it. `plan_versions` belong to an enrollment (ADR-0004), and a personal course has no enrollment until accept (PC1.4). `template_plan` was documented as "org courses only: the admin-accepted map".
+**Decision:** `template_plan` is the course's **base `ConceptMap`** for both scopes: proposed while the course is `mapped`, and final once accepted (`active`). Accepting copies it into the learner's plan v1. For org courses, every assigned learner's enrollment copies it. `courses.status` says which state it's in.
+**Alternatives:**
+- A new `proposed_plan` column: a migration, and two columns for the same idea.
+- A plan version 0 with no enrollment: breaks the "plans belong to an enrollment" rule.
+- Creating the enrollment before accept: the dashboard would list courses the learner never committed to.
+**Consequences:** No migration, and personal and org courses follow one path: generate → (edit) → accept → copy into the enrollment. Edits before accept (PC1.4) change `template_plan`; after accept, they're plan versions.
+**One-liner:** The course owns the starting map; each learner's enrollment owns their copy of it.
+
+## ADR-0017: Cutting a prerequisite rewires its dependents
+**Context:** The spec lets a learner cut concepts before accepting, with a warning naming what depends on the cut concept (§4.4). It doesn't say what happens to those dependents. A dangling prereq would break the graph rules (ADR-0013 validators).
+**Decision:** Each dependent inherits the removed concept's own prereqs (A ← B ← C, cut B ⇒ A ← C), deduplicated and in order (`plan.remove_concept`). The warning names the direct dependents and says the course won't teach the cut concept. Edits are allowed only before accept; afterwards, changes are plan versions.
+**Alternatives:**
+- Drop the edge only: C could then come before A, losing ordering the map relied on.
+- Cascade-remove the dependents: one cut could wipe out much of the map.
+**Consequences:** The edited map is always a valid DAG, and the old order minus the cut concept is still a valid order, so the instructor's sequence survives edits. The learner can skip a topic, but not the ordering that made the rest teachable.
+**One-liner:** Cut what you like; what came after it still comes after what came before it.
