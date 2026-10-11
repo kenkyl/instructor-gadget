@@ -1,17 +1,54 @@
 # Build log
 
-> **Current status:** CP0 in progress. PC0.1–PC0.3 done (foundations, data stores, FastAPI + Next.js wired with typed contract and CI).
-> **Next:** PC0.4: SQLAlchemy async models, first Alembic migration, seed orgs and users.
+> **Current status:** CP0 ✅ merged to `main`. Next: **CP1 / PC1.1** (LLM client wrapper + `diagnose.probe` + intake form) on branch `cp1/create-course` (draft PR open).
+> **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Before PC1.1, Kyle adds `ANTHROPIC_API_KEY` to `.env`, and the AI loads the `claude-api` skill.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
 ---
 
-## CP0 notes (in progress; folded into the CP0 entry when CP0 closes)
-- **AI mistake:** CI referenced `astral-sh/setup-uv@v10`, but that action publishes no floating major tag. Pinned to `v10.3.0`.
-- **AI design flaw caught through pairing:** the health check used `except Exception: pass`. During Kyle's ★ task, a typo and a misplaced `.scalar()` were swallowed and reported as "Postgres: error" while Postgres was healthy. The checks now log the exception.
-- **Next.js 16** ships `AGENTS.md`, which warns that its APIs differ from older versions. The AI read the bundled docs before writing the rewrite config.
-- **Kyle's ★ (PC0.3):** added `postgres_version` end to end: failing test → Pydantic model → endpoint → `make types` → UI. `tsc` caught the stale types before regeneration.
+## CP0: Foundations (Sat 2026-10-10 → Sun 2026-10-11, PR #1)
+
+**What we built**
+- **PC0.1, repo foundations:** public repo (PolyForm Noncommercial), a product-only brief, roadmap, ADRs, CLAUDE.md, build skills (`checkpoint`, `adr`, `new-instructor-skill`), and private material kept in gitignored `docs/private/`.
+- **PC0.2, data stores:** Postgres 16 + Redis 8.10 in Docker (bound to localhost, with healthchecks), plus `make doctor`, which proves the Query Engine is present via `FT._LIST`.
+- **PC0.3, app wiring:** FastAPI (lifespan-managed async engine + Redis) behind a Next.js 16 `/api` rewrite, `/api/health`, OpenAPI → TypeScript types, and CI (ruff, pytest against real stores, OpenAPI drift check, eslint, tsc).
+- **PC0.4, data model:** 15-table async SQLAlchemy model, with per-learner state on `enrollments` (ADR-0004). The first Alembic migration, an idempotent seed (Acme; kyle, dana, priya), an isolated `instructor_test` DB, and `alembic check` in CI. `docs/data-model.md` was written by a forked subagent.
+- **PC0.5, login:** seeded-user login, sessions as a Redis **hash** with TTL (atomic `MULTI/EXEC`), an opaque HttpOnly cookie, `get_current_user` as the single auth seam, and a native-**JSON** dashboard cache-aside (ADR-0011). On the web side: Next `proxy.ts` (optimistic cookie check), login, dashboard, status pages, and shadcn/ui.
+- **Between PCs:** branch-per-CP with draft PRs, and `main` protected (PR + passing checks). Pyright (standard mode) plus pytest failing on un-awaited coroutines (ADR-0012).
+- **PC0.6, skill registry:** `agent/registry.py` discovers and strictly validates skill folders, enforces the never-cache list, composes conduct + skill + call (+ grounding) prompts, and computes `prompt_version = name@semver+sha8`. Includes the `diagnose` skill scaffold (probe + assess contracts and validators), `/api/skills`, and fail-fast loading at startup. **16 tests.**
+
+**Key prompts**
+- Planning: "Follow §0 of the brief and reply with everything in §11", then add pair programming, a public repo, best practice, and a license.
+- "Let's make a feature branch for continued work if it makes sense", which led to branch-per-CP with draft PRs and branch protection.
+- "Use the Redis native JSON data type instead of serialized strings… if you disagree, tell me." The AI partly disagreed: a hash for sessions, JSON for documents (ADR-0011).
+- "Any rules added should capture schema changes elsewhere… and any data stores that could eventually be added," which became the persisted-data rule in CLAUDE.md.
+
+**Decisions:** ADR-0010 (schema conventions), ADR-0011 (Redis types by access pattern), ADR-0012 (two safety nets for a missing `await`).
+
+**Where the AI went wrong or was corrected**
+- **CI action tag:** CI referenced `astral-sh/setup-uv@v10`, but that action publishes no floating major tag. Now pinned to `v10.3.0`.
+- **Swallowed health-check errors:** the health check used `except Exception: pass`. During Kyle's ★ task, a typo and a misplaced `.scalar()` were swallowed and reported as "Postgres: error" while Postgres was healthy. Checks now log the exception.
+- **Old Alembic template:** Alembic's generated migration failed our own lint rules (old `typing` imports). The template is fixed so future migrations come out clean.
+- **Deprecated SQLAlchemy call:** SQLAlchemy 2.1 deprecated `Result.tuples()`. The AI used it from older-version habit, and the deprecation warning caught it.
+- **Unverified dependency:** shadcn init added an unfamiliar `cn` dependency. The AI checked that it's shadcn's own package (repo shadcn-ui/cn, MIT) before accepting it.
+- **Commit on a failing lint:** the AI's commit script ran `make lint`, which failed, but didn't stop, and committed anyway. CI caught it. Fix: checks now gate the commit (`make lint && make test && git commit`).
+- **Overclaim about pyright:** the AI said pyright would catch Kyle's missing `await`. Tested in PC0.6, it didn't: redis-py types its commands as `Awaitable[int]`, not as coroutines. Fix: pytest now fails on "coroutine … was never awaited" (ADR-0012), proven with a throwaway failing test.
+- **Unfounded data-model details:** the forked subagent's data-model doc stated a few details that hadn't been decided yet (cache TTL, cookie flags). They were reconciled against the code in PC0.5.
+
+**Kyle's ★ tasks**
+- **PC0.3:** added `postgres_version` end to end (failing test → model → endpoint → `make types` → UI). `tsc` caught the stale types.
+- **PC0.4:** used `psql` to show the scope check rejecting a bad course, and that string enums accept invalid values (the ADR-0010 tradeoff), which the seed repaired.
+- **PC0.5:** implemented `invalidate_dashboard`. The first attempt was missing `await`, and the test caught it.
+
+**Tradeoffs accepted**
+- String enums: easy to evolve, but not enforced by the DB.
+- JSONB for shapes that are still evolving.
+- Server-side sessions: one Redis lookup per request.
+- Delete-not-patch cache invalidation.
+- Redis-py `await` bugs are caught at test time, not statically.
+
+**How to verify:** `make up && make migrate && make seed && make doctor && make lint && make test`, then `make dev`, open http://localhost:3000, log in as kyle and check the "served from cache" badge. `/status` shows the stack health, and `/api/skills` lists `diagnose` with its prompt versions.
 
 ---
 

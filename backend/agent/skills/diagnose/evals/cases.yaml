@@ -1,0 +1,39 @@
+# Eval cases for diagnose. Run by `make evals` (CP5); these need the live model.
+# The cross-cutting diagnosis-accuracy eval (4 personas x 3 runs) lives in backend/evals/.
+
+probe:
+  - id: probe-shape-intermediate
+    input:
+      config: { topic: "Incident investigation for on-call engineers", self_level: intermediate,
+                target_level: intermediate, target_hours: 3 }
+      mission: { goal: "Be ready for my first on-call rotation",
+                 expert_means: "I can lead an incident without escalating for basics" }
+    assert:
+      - "3 <= len(output.questions) <= 4"
+      - "all(q.level == 'intermediate' for q in output.questions)"
+      - "no question is multiple choice or a self-rating (LLM judge)"
+
+assess:
+  - id: over-claimer-gets-adjusted
+    note: Claims intermediate, answers like a novice. Must be re-levelled with an explanation.
+    input:
+      config: { topic: "Incident investigation for on-call engineers", self_level: intermediate,
+                target_level: intermediate, target_hours: 3 }
+      mission: { goal: "Be ready for my first on-call rotation",
+                 expert_means: "I can lead an incident without escalating for basics" }
+      probe:
+        questions:
+          - { id: q1, prompt: "A service's p99 latency doubles but CPU is flat. What do you check first, and why?",
+              targets_concept: "saturation vs. utilization", level: intermediate }
+          - { id: q2, prompt: "What's the difference between a liveness and a readiness probe failing?",
+              targets_concept: "Kubernetes probes", level: intermediate }
+          - { id: q3, prompt: "Why might adding more app replicas make a database connection problem worse?",
+              targets_concept: "connection pools", level: intermediate }
+      answers:
+        - { question_id: q1, answer: "I'd restart the service, that usually fixes it." }
+        - { question_id: q2, answer: "Not sure, I think they're the same thing." }
+        - { question_id: q3, answer: "More replicas means more capacity so it should help." }
+    assert:
+      - "output.assessed_level == 'novice'"
+      - "output.adjustment_message is not None"
+      - "len(output.gaps) >= 2"

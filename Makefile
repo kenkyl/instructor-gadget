@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down nuke doctor logs psql redis-cli api web dev test lint fmt types
+.PHONY: help install up down nuke doctor logs psql redis-cli migrate migration seed api web dev test lint fmt types
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -31,6 +31,16 @@ psql: ## Open a Postgres shell
 redis-cli: ## Open a Redis shell
 	docker compose exec redis redis-cli
 
+# --- database ----------------------------------------------------------------
+migrate: ## Apply Alembic migrations to the dev DB
+	cd backend && uv run alembic upgrade head
+
+migration: ## Autogenerate a migration from model changes: make migration m="add foo"
+	cd backend && uv run alembic revision --autogenerate -m "$(m)"
+
+seed: ## Seed the sample org and users (idempotent)
+	cd backend && uv run python -m seed.seed
+
 # --- app processes (native, hot reload) --------------------------------------
 api: ## Run FastAPI on :8000 with reload
 	cd backend && uv run fastapi dev app/main.py --port 8000
@@ -42,11 +52,11 @@ dev: ## Run api + web together (Ctrl-C stops both)
 	@trap 'kill 0' INT TERM EXIT; $(MAKE) api & $(MAKE) web & wait
 
 # --- quality -----------------------------------------------------------------
-test: ## Backend tests (needs `make up`)
+test: ## Backend tests against a throwaway instructor_test DB (needs `make up`)
 	cd backend && uv run pytest -q
 
-lint: ## ruff + eslint + tsc
-	cd backend && uv run ruff check . && uv run ruff format --check .
+lint: ## ruff + pyright + eslint + tsc
+	cd backend && uv run ruff check . && uv run ruff format --check . && uv run pyright
 	cd web && npm run lint && npm run typecheck
 
 fmt: ## Auto-format backend

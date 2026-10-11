@@ -123,3 +123,49 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - The project is "source-available", not open source under the OSI definition.
 - The copyright holder can still dual-license it.
 **One-liner:** Anyone can read it and learn from it; nobody else can sell it.
+
+## ADR-0010: Schema conventions: string enums, JSONB for evolving shapes, UUIDs, test DB
+**Context:** The schema must absorb the roadmap (new knobs, triggers, course types) without risky migrations, and stay easy to review.
+**Decision:**
+- **Enums:** Python `StrEnum`s stored as VARCHAR(32), not native Postgres enum types. Values are validated in Python.
+- **JSONB for evolving shapes:** course config, mission, plans, quiz questions and the FSRS card are JSONB, validated by Pydantic models at the service boundary.
+- **UUID primary keys** and timezone-aware timestamps.
+- **A naming convention for constraints**, so Alembic autogenerate output is deterministic.
+- **Tests** run against a separate `instructor_test` database that is recreated and migrated each run.
+**Alternatives:**
+- Native PG enums. Adding a value needs `ALTER TYPE`, which is awkward in transactions and migrations.
+- Fully normalized tables for plans and questions. Many more migrations for shapes that are still changing.
+- Running tests against the dev DB. Flaky, and destroys local data.
+**Consequences:**
+- The database won't reject an invalid enum value written by raw SQL. Only the app writes, so this is acceptable.
+- JSONB fields aren't queryable with foreign keys. Fine for documents we read whole.
+**One-liner:** Rigid where integrity matters (FKs, uniques, the scope check), flexible where the product is still evolving (JSONB + Pydantic).
+
+## ADR-0011: Redis data types: hash for sessions, native JSON for documents
+**Context:** The first plan stored every app-managed Redis value as a serialized JSON string. Redis 8 ships native JSON and the Query Engine.
+**Decision:**
+- `sess:{token}` is a **hash**: flat, tiny, read whole on every request.
+- `dash:{user_id}` and `llm:exact:{sha256}` are **native JSON**.
+- `llm:exact:*` gets a Query Engine index (`idx:llm_exact`) on its metadata: skill, prompt version, cost, latency, hits.
+- A cache hit increments `$.hits` atomically with `JSON.NUMINCRBY`.
+- The dashboard cache is still deleted on writes, never patched in place.
+**Alternatives:**
+- Strings everywhere: simplest, but opaque to Redis. No path reads, no indexing.
+- JSON for sessions too: uniform, but no benefit for a flat, two-field value.
+**Consequences:**
+- We can purge cache entries by prompt version, and report cache inventory (entries, reuse, cost held) inside Redis.
+- Slightly more client code: `r.json()` and an index definition at startup.
+- Serialization still happens on the wire; the gain is that the server understands the structure.
+**One-liner:** Pick the Redis type by access pattern: hashes for flat records, JSON for documents you need to query or update by path.
+
+## ADR-0012: Two safety nets for missing `await`
+**Context:** In PC0.5 a missing `await` on an async Redis call silently skipped the `DEL`. Ruff doesn't detect this.
+**Decision:**
+- Pyright runs in standard mode in `make lint` and CI. It flags unused coroutines from any `async def`.
+- pytest turns `RuntimeWarning` (including "coroutine … was never awaited") and unraisable-exception warnings into test failures. This covers redis-py, whose commands are typed `Awaitable[int]`, which pyright's coroutine rule doesn't check.
+**Alternatives:**
+- `reportUnusedCallResult`: far too noisy.
+- Code review alone: it's what missed this bug.
+**Consequences:** One more dev dependency (pyright). Static coverage for our own and typed libraries, runtime coverage for redis-py on any tested path.
+**One-liner:** Catch the classic async bug statically where the types allow, and at test time where they don't.
+

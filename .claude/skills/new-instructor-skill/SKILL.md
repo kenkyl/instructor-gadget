@@ -26,7 +26,9 @@ Arguments: the skill name (kebab-case), plus its calls, each with a cache policy
    calls:
      <call>: { cache: never, stream: false, max_tokens: 2000 }
    ```
+   Frontmatter is validated strictly (`SkillMeta` in `registry.py`): unknown keys fail startup. `version` is semver; `prompt_version` = `name@version+sha8(prompt files)` is computed automatically.
 4. Instructions in `SKILL.md` must follow `docs/learning-design.md`. Cite the spec section each rule comes from. Never restate the shared conduct rules (`skills/_shared/conduct.md` is composed in automatically).
 5. Cache policy: `diagnose`, `grade`, `remediate` and anything with learner misconceptions must be `never` (ADR-0007).
 6. Validators belong in `schema.py` (e.g. "a message is required when assessed ≠ claimed"). Deterministic decisions belong in `pedagogy.py`, never in a skill.
-7. Verify by running `uv run pytest backend/tests/test_registry.py`. The new skill must load, and its `prompt_version` must be printed.
+7. Verify by running `cd backend && uv run pytest -q -s tests/test_registry.py`. Add a load test for the new skill there (copy `test_diagnose_loads`), so its `prompt_version` is printed. Then run `make types` if the change affects the API (`/api/skills` lists every skill).
+8. Modifier skills (e.g. `ground-in-sources`) set `modifier: true` and define **no** calls or `schema.py`; the registry composes them into other skills' prompts.

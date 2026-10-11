@@ -10,6 +10,8 @@ An AI instructor that diagnoses where you really are, maps the concepts and prer
 - [Learning design](docs/learning-design.md): how the instructor teaches
 - [Build brief](docs/build-brief.md): Phase 1 scope
 - [Decisions](docs/decisions.md): ADRs
+- [Build plan](docs/build-plan.md): how Phase 1 is being built
+- [Data model](docs/data-model.md): every table, JSONB shape and Redis key, with examples
 - [Roadmap](docs/roadmap.md): the full product vision
 
 ## Quickstart

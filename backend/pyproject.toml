@@ -5,17 +5,21 @@ description = "Instructor backend: FastAPI app + in-process agent package"
 license = "PolyForm-Noncommercial-1.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.20.0",
     "fastapi[standard]>=0.143.0",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.1.4",
 ]
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.414",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.ruff]
@@ -26,6 +30,42 @@ target-version = "py312"
 # pycodestyle, pyflakes, isort, bugbear, pyupgrade, simplify, async rules
 select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]
 
+[tool.ruff.lint.per-file-ignores]
+"migrations/versions/*" = ["E501"]  # generated SQL literals
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# A missing `await` on redis-py calls isn't visible to pyright (they're typed as Awaitable,
+# not Coroutine), so fail any test that leaves a coroutine un-awaited at runtime.
+filterwarnings = [
+    "error::RuntimeWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
+
+
+[tool.alembic]
+# Config lives here (no alembic.ini). The DB URL comes from app settings in migrations/env.py.
+script_location = "%(here)s/migrations"
+file_template = "%%(year)d%%(month).2d%%(day).2d_%%(rev)s_%%(slug)s"
+prepend_sys_path = ["."]
+
+[[tool.alembic.post_write_hooks]]
+name = "ruff_fix"
+type = "module"
+module = "ruff"
+options = "check --fix REVISION_SCRIPT_FILENAME"
+
+[[tool.alembic.post_write_hooks]]
+name = "ruff_format"
+type = "module"
+module = "ruff"
+options = "format REVISION_SCRIPT_FILENAME"
+
+[tool.pyright]
+# "standard" adds checks beyond the default ("basic"), e.g. unused coroutines (a missing `await`).
+typeCheckingMode = "standard"
+pythonVersion = "3.12"
+include = ["app", "agent", "seed", "tests", "migrations"]
+venvPath = "."
+venv = ".venv"
