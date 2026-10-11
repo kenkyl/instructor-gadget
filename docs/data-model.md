@@ -58,9 +58,9 @@ flowchart LR
     OBS[("llm_calls")]
   end
   subgraph RD["Redis (disposable)"]
-    SESS[("sess:{token}")]
-    DASH[("dash:{user_id}")]
-    EX[("llm:exact:{sha256}")]
+    SESS[("sess:{token}<br/>hash")]
+    DASH[("dash:{user_id}<br/>JSON")]
+    EX[("llm:exact:{sha256}<br/>JSON + index")]
     SEM[("llmcache_semantic<br/>vector index")]
   end
 
@@ -788,17 +788,28 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 
 | Key / structure | Type | TTL | Written | Read | Invalidated | Status |
 |---|---|---|---|---|---|---|
-| `sess:{token}` | string (JSON) | 8 h (`SESSION_TTL_SECONDS`) | Login | `get_current_user` on every request | Logout (DEL) or expiry | 🔜 PC0.5 |
-| `dash:{user_id}` | string (JSON) | 10 min | Warmed at login; refilled on a cache miss (cache-aside) | `GET /api/dashboard` | DEL on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | 🔜 PC0.5 |
-| `llm:exact:{sha256}` | string (JSON) | 7 days | After a successful generation of a cacheable call | Before every cacheable call (tier 1) | A new `prompt_version` produces a new key, so old entries simply age out | 🔜 PC2.2 |
+| `sess:{token}` | **hash** | 8 h (`SESSION_TTL_SECONDS`) | Login (`HSET` + `EXPIRE`) | `get_current_user` on every request (`HGETALL`) | Logout (`DEL`) or expiry | 🔜 PC0.5 |
+| `dash:{user_id}` | **JSON** (native) | 10 min | Warmed at login; refilled on a cache miss (cache-aside), `JSON.SET` | `GET /api/dashboard` (`JSON.GET`) | `DEL` on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | 🔜 PC0.5 |
+| `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | 🔜 PC2.2 |
 | `llmcache_semantic` (RedisVL `SemanticCache` index) | hash + vector index | 7 days per entry | After a successful `teach-concept` generation | `teach-concept` on an exact miss (tier 2, nearest neighbour within a distance threshold, **filtered by bucket tags**) | Prompt-version tag mismatch; TTL | 🔜 PC3.1 |
 
-### 6.1 Session: `sess:{token}`
-- **Token:** 32 random bytes, URL-safe. Sent to the browser as the `sid` cookie (HttpOnly, SameSite=Lax), never in a URL.
-- **Value:** `{ "user_id": "2b7e…b002", "username": "dana", "created_at": "2026-10-11T09:00:00Z" }`
+**Why these types (ADR-0011):**
+- **Hash** for sessions: tiny, flat, and read whole on every request. It's the idiomatic, compact Redis structure for that.
+- **Native JSON** for documents: the dashboard and LLM cache entries are nested. Redis can then read or update a path without fetching the whole value, and the Query Engine can index fields inside them.
+- Native JSON doesn't remove serialization (the client still sends and receives JSON text). The win is that the server understands the structure.
 
-### 6.2 Dashboard: `dash:{user_id}`
-Cache-aside: read Redis; on a miss, query Postgres, write Redis with a TTL, return. Writes go to Postgres and then **delete** the key; the next read refills it. Deleting rather than updating avoids racing two writers.
+### 6.1 Session: `sess:{token}` (hash)
+- **Token:** 32 random bytes, URL-safe. Sent to the browser as the `sid` cookie (HttpOnly, SameSite=Lax), never in a URL.
+- **Fields:**
+
+| Field | Example |
+|---|---|
+| `user_id` | `2b7e…b002` |
+| `username` | `dana` |
+| `created_at` | `2026-10-11T09:00:00Z` |
+
+### 6.2 Dashboard: `dash:{user_id}` (native JSON)
+Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, return. Writes go to Postgres and then **delete** the key; the next read refills it. We delete rather than patching paths in place: patching could drift from Postgres if two writers race. Native JSON still lets a client read one path, e.g. `JSON.GET dash:{id} $.courses[*].due_count`.
 
 ```json
 { "courses": [{ "enrollment_id": "e001…0001", "title": "On-call readiness at Acme Payments", "scope": "org",
@@ -806,10 +817,24 @@ Cache-aside: read Redis; on a miss, query Postgres, write Redis with a TTL, retu
                 "due_count": 1, "badge": null }] }
 ```
 
-### 6.3 Exact LLM cache: `llm:exact:{sha256}`
+### 6.3 Exact LLM cache: `llm:exact:{sha256}` (native JSON + index)
 - **Key:** sha256 of the canonical JSON of `{skill, call, model, prompt_version, cacheable inputs}`. Learner ids are never part of it.
 - **`design-assessment`** is keyed on the **lesson's content hash**, so a lesson and its quiz always match.
-- **Value:** `{ "output": {…validated output…}, "cost_usd": 0.027, "latency_ms": 21400, "created_at": "…" }`. The original cost and latency are what produce `llm_calls.saved_*` on a later hit.
+- **Document:**
+  ```json
+  { "skill": "teach-concept", "call": "teach", "prompt_version": "teach-concept@0.1.0+3f9a1c2e",
+    "model": "claude-sonnet-5-5", "cost_usd": 0.027, "latency_ms": 21400,
+    "created_at": 1791709200, "hits": 3, "output": { "…": "validated output" } }
+  ```
+  The original `cost_usd` and `latency_ms` produce `llm_calls.saved_*` on a later hit. `hits` is incremented atomically (`JSON.NUMINCRBY`), with no read-modify-write.
+- **Index `idx:llm_exact`** (`FT.CREATE … ON JSON PREFIX 1 llm:exact:`):
+
+| Field (JSONPath) | Type | Used for |
+|---|---|---|
+| `$.skill`, `$.call`, `$.prompt_version`, `$.model` | TAG | Find or purge entries, e.g. every entry for an old prompt version |
+| `$.cost_usd`, `$.latency_ms`, `$.hits`, `$.created_at` | NUMERIC | Cache inventory stats (`FT.AGGREGATE`): entries per skill, most-reused lessons, generation cost held in cache |
+
+Realized savings (hit rate, $ and seconds saved) come from `llm_calls` in Postgres, which records every lookup. The index describes what's *in* the cache.
 
 ### 6.4 Semantic LLM cache: `llmcache_semantic`
 

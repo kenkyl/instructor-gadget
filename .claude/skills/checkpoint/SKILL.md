@@ -28,6 +28,7 @@ Run whichever of these exist (check the `Makefile`):
   - Tradeoffs accepted
   - How to verify
 - Any new non-obvious choice gets an ADR (use the `adr` skill).
+- If any persisted data changed (Postgres tables/columns, JSONB shapes, Redis keys/types/TTLs/indexes, cookies or browser storage, or a new store), confirm that `docs/data-model.md`, the migration, the Pydantic schemas and the generated types are all updated (CLAUDE.md persisted-data rule).
 - If a roadmap item moved phases, update `docs/roadmap.md`.
 - If `docs/private/checkpoint-extra.md` exists (gitignored), follow its extra steps too.
 - Keep the CLAUDE.md commands table current.

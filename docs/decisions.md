@@ -141,3 +141,20 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - JSONB fields aren't queryable with foreign keys. Fine for documents we read whole.
 **One-liner:** Rigid where integrity matters (FKs, uniques, the scope check), flexible where the product is still evolving (JSONB + Pydantic).
 
+## ADR-0011: Redis data types: hash for sessions, native JSON for documents
+**Context:** The first plan stored every app-managed Redis value as a serialized JSON string. Redis 8 ships native JSON and the Query Engine.
+**Decision:**
+- `sess:{token}` is a **hash**: flat, tiny, read whole on every request.
+- `dash:{user_id}` and `llm:exact:{sha256}` are **native JSON**.
+- `llm:exact:*` gets a Query Engine index (`idx:llm_exact`) on its metadata: skill, prompt version, cost, latency, hits.
+- A cache hit increments `$.hits` atomically with `JSON.NUMINCRBY`.
+- The dashboard cache is still deleted on writes, never patched in place.
+**Alternatives:**
+- Strings everywhere: simplest, but opaque to Redis. No path reads, no indexing.
+- JSON for sessions too: uniform, but no benefit for a flat, two-field value.
+**Consequences:**
+- We can purge cache entries by prompt version, and report cache inventory (entries, reuse, cost held) inside Redis.
+- Slightly more client code: `r.json()` and an index definition at startup.
+- Serialization still happens on the wire; the gain is that the server understands the structure.
+**One-liner:** Pick the Redis type by access pattern: hashes for flat records, JSON for documents you need to query or update by path.
+

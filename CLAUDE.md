@@ -68,3 +68,10 @@ Filled in as they come to exist (PC0.2+).
 - Schema changes: edit `app/models.py` → `make migration m="..."` → review → `make migrate`. CI fails if models and migrations drift (`alembic check`).
 - Tests run against a throwaway `instructor_test` DB, recreated and migrated each session (`tests/conftest.py`); never the dev DB.
 - Enums are `StrEnum`s stored as VARCHAR (ADR-0010); JSONB columns are validated by Pydantic at the service boundary.
+- **Persisted-data rule.** Any change to stored data updates everything that describes it, in the same pair checkpoint:
+  - Postgres tables and columns: `app/models.py` plus a reviewed Alembic migration.
+  - JSONB shapes: their Pydantic schemas.
+  - Redis keys, types, TTLs and indexes (ADR-0011: hash for flat records, native JSON for documents).
+  - Cookies or browser storage.
+  - Any new data store, which also needs an ADR.
+  - Always update `docs/data-model.md`. Run `make types` if the change is API-facing.
