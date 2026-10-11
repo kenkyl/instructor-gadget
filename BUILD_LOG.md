@@ -7,6 +7,10 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 
 ---
 
+## CP1 notes (in progress; folded into the CP1 entry when CP1 closes)
+- **AI mistake (PC0.6 verify step):** the AI told Kyle to edit a prompt file and re-curl `/api/skills`. The hash didn't change, because the registry is cached at startup and `fastapi dev` only reloads on `.py` changes. Fix: `make api` now runs uvicorn with `--reload-include '*.md' --reload-include '*.yaml'`, so prompt edits hot-reload in dev.
+- **AI mistake (while testing that fix):** the AI started a test server on port 8001 without checking whether the port was free. It was in use by an unrelated local process, and the AI's cleanup (`kill` on whatever listened on 8001) stopped that process. Rule: check that a port is free before using it, and only kill PIDs the AI itself started.
+
 ## CP0: Foundations (Sat 2026-10-10 → Sun 2026-10-11, PR #1)
 
 **What we built**
