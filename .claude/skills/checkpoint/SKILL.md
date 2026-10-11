@@ -32,6 +32,7 @@ Run whichever of these exist (check the `Makefile`):
 - If a roadmap item moved phases, update `docs/roadmap.md`.
 - If `docs/private/checkpoint-extra.md` exists (gitignored), follow its extra steps too.
 - Keep the CLAUDE.md commands table current.
+- **Always** update the status line at the top of `BUILD_LOG.md` (current CP/PC, branch, PR, next step) and the Status table in `docs/build-plan.md`. A new session resumes from them.
 
 ## 4. Commit and push
 - Work happens on the CP branch (`cpN/<slug>`), never directly on `main`.

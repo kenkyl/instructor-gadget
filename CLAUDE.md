@@ -2,12 +2,19 @@
 
 Instructor is an adaptive learning-course agent. It diagnoses where a learner really is, maps concepts and prerequisites, teaches one concept at a time with zero-hint quizzes, and re-plans from graded evidence. Org courses are grounded in internal docs.
 
+## Resuming work (start here in a new session)
+1. Read the **status line at the top of `BUILD_LOG.md`**: it names the current CP/PC, branch and PR.
+2. Read `docs/build-plan.md` (the PC sequence and ★ tasks) and `docs/decisions.md` (ADRs).
+3. `git switch <branch from status>` && `git pull`; `make up && make migrate && make seed && make doctor && make test`.
+4. Continue at the next PC using the working agreement below. Close each PC with the `checkpoint` skill, which keeps the status line current.
+
 ## Source-of-truth docs
 - `docs/learning-design.md`: **how it teaches**. Pedagogy rules win; any change goes in an ADR.
 - `docs/build-brief.md`: what to build in Phase 1.
 - `docs/roadmap.md`: the full vision. Build Phase 1 only, but design for everything listed there.
 - `docs/decisions.md`: ADRs. Add one (with the `adr` skill) for every non-obvious choice.
-- The approved implementation plan (pair-checkpoint sequence) is summarized in `BUILD_LOG.md`.
+- `docs/build-plan.md`: the pair-checkpoint sequence for CP1–CP6 + P1+, with ★ tasks.
+- `docs/data-model.md`: every table, JSONB shape and Redis key (keep it current: persisted-data rule below).
 
 ## Working agreement (pair programming)
 Kyle wants a deep working understanding of every component, so understanding matters as much as working code.

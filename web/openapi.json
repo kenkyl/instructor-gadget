@@ -232,10 +232,68 @@
           }
         }
       }
+    },
+    "/api/skills": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "List Skills",
+        "operationId": "list_skills_api_skills_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SkillInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Skills Api Skills Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "CallInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cache": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "semantic",
+              "never"
+            ],
+            "title": "Cache"
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "cache",
+          "stream",
+          "prompt_version"
+        ],
+        "title": "CallInfo"
+      },
       "CurrentUser": {
         "properties": {
           "id": {
@@ -489,6 +547,42 @@
           "display_name"
         ],
         "title": "SeededUser"
+      },
+      "SkillInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "modifier": {
+            "type": "boolean",
+            "title": "Modifier"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/CallInfo"
+            },
+            "type": "array",
+            "title": "Calls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "description",
+          "modifier",
+          "calls"
+        ],
+        "title": "SkillInfo"
       },
       "ValidationError": {
         "properties": {
