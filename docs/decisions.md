@@ -158,3 +158,14 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Serialization still happens on the wire; the gain is that the server understands the structure.
 **One-liner:** Pick the Redis type by access pattern: hashes for flat records, JSON for documents you need to query or update by path.
 
+## ADR-0012: Two safety nets for missing `await`
+**Context:** In PC0.5 a missing `await` on an async Redis call silently skipped the `DEL`. Ruff doesn't detect this.
+**Decision:**
+- Pyright runs in standard mode in `make lint` and CI. It flags unused coroutines from any `async def`.
+- pytest turns `RuntimeWarning` (including "coroutine … was never awaited") and unraisable-exception warnings into test failures. This covers redis-py, whose commands are typed `Awaitable[int]`, which pyright's coroutine rule doesn't check.
+**Alternatives:**
+- `reportUnusedCallResult`: far too noisy.
+- Code review alone: it's what missed this bug.
+**Consequences:** One more dev dependency (pyright). Static coverage for our own and typed libraries, runtime coverage for redis-py on any tested path.
+**One-liner:** Catch the classic async bug statically where the types allow, and at test time where they don't.
+

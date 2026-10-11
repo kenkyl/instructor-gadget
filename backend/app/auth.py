@@ -74,10 +74,13 @@ async def get_current_user(
     if sid:
         data = await redis.hgetall(session_key(sid))
         if data:
-            return CurrentUser(
-                id=uuid.UUID(data["user_id"]),
-                username=data["username"],
-                display_name=data["display_name"],
+            # Validate what comes back from Redis instead of trusting its shape.
+            return CurrentUser.model_validate(
+                {
+                    "id": data["user_id"],
+                    "username": data["username"],
+                    "display_name": data["display_name"],
+                }
             )
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not logged in")
 

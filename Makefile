@@ -55,8 +55,8 @@ dev: ## Run api + web together (Ctrl-C stops both)
 test: ## Backend tests against a throwaway instructor_test DB (needs `make up`)
 	cd backend && uv run pytest -q
 
-lint: ## ruff + eslint + tsc
-	cd backend && uv run ruff check . && uv run ruff format --check .
+lint: ## ruff + pyright + eslint + tsc
+	cd backend && uv run ruff check . && uv run ruff format --check . && uv run pyright
 	cd web && npm run lint && npm run typecheck
 
 fmt: ## Auto-format backend

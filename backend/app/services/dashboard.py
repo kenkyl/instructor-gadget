@@ -89,7 +89,8 @@ async def get_dashboard(db: AsyncSession, redis: Redis, user: CurrentUser) -> Da
     key = dash_key(user.id)
     cached = await redis.json().get(key)
     if cached is not None:
-        return DashboardResponse(**cached, served_from="cache")
+        dashboard = Dashboard.model_validate(cached)  # validate the cached shape, don't trust it
+        return DashboardResponse(**dashboard.model_dump(), served_from="cache")
 
     dashboard = await build_dashboard(db, user)
     async with redis.pipeline(transaction=True) as pipe:  # never a key without a TTL

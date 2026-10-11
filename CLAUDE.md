@@ -56,11 +56,12 @@ Filled in as they come to exist (PC0.2+).
 | `make seed` | Seed the sample org (Acme) + users kyle, dana, priya (idempotent) |
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
-| `make lint` / `make fmt` | ruff + eslint + tsc / auto-format backend |
+| `make lint` / `make fmt` | ruff + pyright + eslint + tsc / auto-format backend |
 | `make types` | Regenerate `web/src/lib/api-types.ts` from FastAPI's OpenAPI. Run after any API model change |
 
 ## Conventions
-- Python 3.12 with uv; ruff for lint and format; pytest; type hints everywhere; Pydantic v2 models at every boundary.
+- Python 3.12 with uv; ruff for lint and format; pyright (standard mode); pytest; type hints everywhere; Pydantic v2 models at every boundary. Validate data read back from Redis with Pydantic (`model_validate`); don't trust its shape.
+- Async: every redis-py, SQLAlchemy async, and Anthropic async call must be awaited. Pyright catches unused coroutines; redis-py's `Awaitable` typing slips past it, so pytest fails on any `coroutine ... was never awaited` warning.
 - TypeScript strict; generated API types live in `web/src/lib/api-types.ts` (never hand-edit; CI fails if `web/openapi.json` is stale).
 - Next.js 16 has breaking changes vs. older versions: read `web/AGENTS.md` and the bundled docs in `web/node_modules/next/dist/docs/` before writing Next code.
 - Backend run commands use `uv run` from `backend/`; the browser only calls `/api/*` on Next, which proxies to FastAPI.
