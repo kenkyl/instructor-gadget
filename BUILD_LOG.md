@@ -1,7 +1,7 @@
 # Build log
 
-> **Current status:** CP0 in progress. PC0.1–PC0.4 done (foundations, data stores, wiring + CI, data model + migrations + seed).
-> **Branch:** `cp0/data-model-auth` (draft PR #1). **Next:** PC0.5: login (choose a seeded user, session in Redis), `get_current_user`, dashboard cache-aside stub.
+> **Current status:** CP0 in progress. PC0.1–PC0.5 done (… + login, Redis hash sessions, native-JSON dashboard cache-aside).
+> **Branch:** `cp0/data-model-auth` (draft PR #1). **Next:** PC0.6: product skill registry stub + `diagnose` scaffold.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
@@ -12,6 +12,8 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 - **AI design flaw caught through pairing:** the health check used `except Exception: pass`. During Kyle's ★ task, a typo and a misplaced `.scalar()` were swallowed and reported as "Postgres: error" while Postgres was healthy. The checks now log the exception.
 - **Next.js 16** ships `AGENTS.md`, which warns that its APIs differ from older versions. The AI read the bundled docs before writing the rewrite config.
 - **PC0.4:** Alembic's generated migration failed our own lint rules (old `typing` imports). Fixed the template so every future migration is generated clean. SQLAlchemy 2.1 deprecated `Result.tuples()`; the AI used it from older-version habit and the deprecation warning caught it.
+- **PC0.5:** read Next 16's bundled docs. `middleware` is now `proxy`, and the docs say proxy must only do optimistic cookie checks (no DB or Redis). shadcn init added an unfamiliar `cn` dependency; the AI verified it's shadcn's own package (repo shadcn-ui/cn, MIT) before accepting it.
+- **Kyle's ★ (PC0.5):** implemented `invalidate_dashboard`. The first attempt forgot `await` on the async Redis client: the coroutine was never run, so `DEL` never happened and the test caught it. This is the classic async-Python bug; ruff doesn't detect it, a type checker (pyright) would.
 - **Kyle's ★ (PC0.3):** added `postgres_version` end to end: failing test → Pydantic model → endpoint → `make types` → UI. `tsc` caught the stale types before regeneration.
 
 ---

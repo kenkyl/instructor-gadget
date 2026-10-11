@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5-5"
 
     session_ttl_seconds: int = 8 * 60 * 60
+    # Secure cookies need HTTPS; local dev is plain http, so this is off unless deployed.
+    cookie_secure: bool = False
+    dashboard_ttl_seconds: int = 10 * 60
 
 
 @lru_cache

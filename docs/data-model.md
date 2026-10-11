@@ -788,8 +788,8 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 
 | Key / structure | Type | TTL | Written | Read | Invalidated | Status |
 |---|---|---|---|---|---|---|
-| `sess:{token}` | **hash** | 8 h (`SESSION_TTL_SECONDS`) | Login (`HSET` + `EXPIRE`) | `get_current_user` on every request (`HGETALL`) | Logout (`DEL`) or expiry | 🔜 PC0.5 |
-| `dash:{user_id}` | **JSON** (native) | 10 min | Warmed at login; refilled on a cache miss (cache-aside), `JSON.SET` | `GET /api/dashboard` (`JSON.GET`) | `DEL` on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | 🔜 PC0.5 |
+| `sess:{token}` | **hash** | 8 h (`SESSION_TTL_SECONDS`) | Login (`HSET` + `EXPIRE`) | `get_current_user` on every request (`HGETALL`) | Logout (`DEL`) or expiry | ✅ PC0.5 |
+| `dash:{user_id}` | **JSON** (native) | 10 min (`DASHBOARD_TTL_SECONDS`) | Warmed at login; refilled on a cache miss (cache-aside), `JSON.SET` | `GET /api/dashboard` (`JSON.GET`) | `DEL` on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | ✅ PC0.5 |
 | `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | 🔜 PC2.2 |
 | `llmcache_semantic` (RedisVL `SemanticCache` index) | hash + vector index | 7 days per entry | After a successful `teach-concept` generation | `teach-concept` on an exact miss (tier 2, nearest neighbour within a distance threshold, **filtered by bucket tags**) | Prompt-version tag mismatch; TTL | 🔜 PC3.1 |
 
@@ -806,7 +806,12 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 |---|---|
 | `user_id` | `2b7e…b002` |
 | `username` | `dana` |
+| `display_name` | `Dana (new SRE at Acme)` |
 | `created_at` | `2026-10-11T09:00:00Z` |
+
+- **Writes are atomic:** `HSET` and `EXPIRE` run in one `MULTI/EXEC` pipeline, so a session never exists without its TTL. The same applies to `JSON.SET` + `EXPIRE` for the dashboard.
+- **Auth layers:** Next's `src/proxy.ts` only checks that the `sid` cookie *exists* (an optimistic redirect to `/login`). FastAPI's `get_current_user` is the real check on every API call.
+- **Tests** use Redis logical DB 15 (dev uses DB 0), flushed at the start of each test run.
 
 ### 6.2 Dashboard: `dash:{user_id}` (native JSON)
 Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, return. Writes go to Postgres and then **delete** the key; the next read refills it. We delete rather than patching paths in place: patching could drift from Postgres if two writers race. Native JSON still lets a client read one path, e.g. `JSON.GET dash:{id} $.courses[*].due_count`.

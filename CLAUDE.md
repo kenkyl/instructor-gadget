@@ -64,6 +64,9 @@ Filled in as they come to exist (PC0.2+).
 - TypeScript strict; generated API types live in `web/src/lib/api-types.ts` (never hand-edit; CI fails if `web/openapi.json` is stale).
 - Next.js 16 has breaking changes vs. older versions: read `web/AGENTS.md` and the bundled docs in `web/node_modules/next/dist/docs/` before writing Next code.
 - Backend run commands use `uv run` from `backend/`; the browser only calls `/api/*` on Next, which proxies to FastAPI.
+- Auth: protect endpoints with the `CurrentUserDep` dependency (`app/auth.py`). Never read the session anywhere else. `web/src/proxy.ts` is an optimistic cookie-presence redirect only.
+- Any write that changes a user's enrollments or progress must call `invalidate_dashboard(redis, user_id)` (cache-aside: delete, don't patch).
+- UI components: shadcn/ui (`npx shadcn@latest add <name>`), in `web/src/components/ui/`.
 - Prompts live in skill folders, never inline in Python.
 - Schema changes: edit `app/models.py` → `make migration m="..."` → review → `make migrate`. CI fails if models and migrations drift (`alembic check`).
 - Tests run against a throwaway `instructor_test` DB, recreated and migrated each session (`tests/conftest.py`); never the dev DB.
