@@ -51,6 +51,9 @@ Filled in as they come to exist (PC0.2+).
 | `make down` / `make nuke` | Stop data stores / stop and delete their volumes |
 | `make psql` / `make redis-cli` | Shells into the data stores |
 | `make install` | Install backend (uv) + web (npm) dependencies |
+| `make migrate` | Apply Alembic migrations to the dev DB |
+| `make migration m="..."` | Autogenerate a migration after changing `app/models.py`; always review the generated file |
+| `make seed` | Seed the sample org (Acme) + users kyle, dana, priya (idempotent) |
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
 | `make lint` / `make fmt` | ruff + eslint + tsc / auto-format backend |
@@ -62,3 +65,6 @@ Filled in as they come to exist (PC0.2+).
 - Next.js 16 has breaking changes vs. older versions: read `web/AGENTS.md` and the bundled docs in `web/node_modules/next/dist/docs/` before writing Next code.
 - Backend run commands use `uv run` from `backend/`; the browser only calls `/api/*` on Next, which proxies to FastAPI.
 - Prompts live in skill folders, never inline in Python.
+- Schema changes: edit `app/models.py` → `make migration m="..."` → review → `make migrate`. CI fails if models and migrations drift (`alembic check`).
+- Tests run against a throwaway `instructor_test` DB, recreated and migrated each session (`tests/conftest.py`); never the dev DB.
+- Enums are `StrEnum`s stored as VARCHAR (ADR-0010); JSONB columns are validated by Pydantic at the service boundary.

@@ -41,6 +41,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -q
+      - name: Migrations match the models
+        run: uv run alembic upgrade head && uv run alembic check
       - name: OpenAPI types are up to date
         run: |
           uv run python -m app.export_openapi > ../web/openapi.json

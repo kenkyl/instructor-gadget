@@ -123,3 +123,21 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - The project is "source-available", not open source under the OSI definition.
 - The copyright holder can still dual-license it.
 **One-liner:** Anyone can read it and learn from it; nobody else can sell it.
+
+## ADR-0010: Schema conventions: string enums, JSONB for evolving shapes, UUIDs, test DB
+**Context:** The schema must absorb the roadmap (new knobs, triggers, course types) without risky migrations, and stay easy to review.
+**Decision:**
+- **Enums:** Python `StrEnum`s stored as VARCHAR(32), not native Postgres enum types. Values are validated in Python.
+- **JSONB for evolving shapes:** course config, mission, plans, quiz questions and the FSRS card are JSONB, validated by Pydantic models at the service boundary.
+- **UUID primary keys** and timezone-aware timestamps.
+- **A naming convention for constraints**, so Alembic autogenerate output is deterministic.
+- **Tests** run against a separate `instructor_test` database that is recreated and migrated each run.
+**Alternatives:**
+- Native PG enums. Adding a value needs `ALTER TYPE`, which is awkward in transactions and migrations.
+- Fully normalized tables for plans and questions. Many more migrations for shapes that are still changing.
+- Running tests against the dev DB. Flaky, and destroys local data.
+**Consequences:**
+- The database won't reject an invalid enum value written by raw SQL. Only the app writes, so this is acceptable.
+- JSONB fields aren't queryable with foreign keys. Fine for documents we read whole.
+**One-liner:** Rigid where integrity matters (FKs, uniques, the scope check), flexible where the product is still evolving (JSONB + Pydantic).
+

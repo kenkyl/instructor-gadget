@@ -1,7 +1,7 @@
 # Build log
 
-> **Current status:** CP0 in progress. PC0.1–PC0.3 done (foundations, data stores, FastAPI + Next.js wired with typed contract and CI).
-> **Branch:** `cp0/data-model-auth` (draft PR open). **Next:** PC0.4: SQLAlchemy async models, first Alembic migration, seed orgs and users.
+> **Current status:** CP0 in progress. PC0.1–PC0.4 done (foundations, data stores, wiring + CI, data model + migrations + seed).
+> **Branch:** `cp0/data-model-auth` (draft PR #1). **Next:** PC0.5: login (choose a seeded user, session in Redis), `get_current_user`, dashboard cache-aside stub.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
@@ -11,6 +11,7 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 - **AI mistake:** CI referenced `astral-sh/setup-uv@v10`, but that action publishes no floating major tag. Pinned to `v10.3.0`.
 - **AI design flaw caught through pairing:** the health check used `except Exception: pass`. During Kyle's ★ task, a typo and a misplaced `.scalar()` were swallowed and reported as "Postgres: error" while Postgres was healthy. The checks now log the exception.
 - **Next.js 16** ships `AGENTS.md`, which warns that its APIs differ from older versions. The AI read the bundled docs before writing the rewrite config.
+- **PC0.4:** Alembic's generated migration failed our own lint rules (old `typing` imports). Fixed the template so every future migration is generated clean. SQLAlchemy 2.1 deprecated `Result.tuples()`; the AI used it from older-version habit and the deprecation warning caught it.
 - **Kyle's ★ (PC0.3):** added `postgres_version` end to end: failing test → Pydantic model → endpoint → `make types` → UI. `tsc` caught the stale types before regeneration.
 
 ---
