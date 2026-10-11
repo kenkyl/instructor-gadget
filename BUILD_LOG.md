@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP0 ✅ merged to `main`. Next: **CP1 / PC1.1** (LLM client wrapper + `diagnose.probe` + intake form) on branch `cp1/create-course` (draft PR open).
+> **Current status:** CP0 ✅ merged to `main`. Next: **CP1 / PC1.1** (LLM client wrapper + `diagnose.probe` + intake form) on branch `cp1/create-course` (draft PR #2).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Before PC1.1, Kyle adds `ANTHROPIC_API_KEY` to `.env`, and the AI loads the `claude-api` skill.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
