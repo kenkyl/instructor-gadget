@@ -12,7 +12,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
   - **Next**
 
   Then wait for "go".
-- **One branch per CP** (`cpN/<slug>`), with a draft PR opened at the start. Commit and push after each PC. At the end of a CP, merge with a merge commit once CI passes. `main` is protected: it needs a PR and passing `backend` + `web` checks.
+- **One branch per CP** (`cpN/<slug>`), with a draft PR opened at the start. Commit and push after each PC. At the end of a CP, mark the PR ready; once CI passes, Kyle reviews and merges it (merge commit). `main` is protected: it needs a PR and passing `backend` + `web` checks.
 - Use the `checkpoint` skill to close a PC or CP, the `adr` skill for decisions, and `new-instructor-skill` for every product skill.
 
 ## Status

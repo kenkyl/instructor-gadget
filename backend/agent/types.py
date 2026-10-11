@@ -1,6 +1,7 @@
 """Shared domain types used across product skills and services (learning-design §4)."""
 
 from datetime import date
+from enum import StrEnum
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, ValidationInfo, model_validator
@@ -11,6 +12,16 @@ Level = Literal["novice", "intermediate", "strong", "expert"]  # claimed / asses
 TargetLevel = Literal["beginner", "intermediate", "advanced", "expert"]
 Bloom = Literal["remember", "understand", "apply", "analyze", "evaluate", "create"]
 ConceptType = Literal["algorithm", "systems", "math", "syntax", "api", "conceptual"]
+
+
+class Band(StrEnum):
+    """Mastery bands (spec §4.9). Stored in concept_progress.band; set by pedagogy.band()."""
+
+    shaky = "shaky"
+    learning = "learning"
+    solid = "solid"
+    mastered = "mastered"
+
 
 # Format preferences are an open set (spec §6). Phase 1 implements these three; others are
 # accepted and stored, and the UI labels them "coming soon".

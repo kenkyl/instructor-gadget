@@ -227,3 +227,17 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Cascade-remove the dependents: one cut could wipe out much of the map.
 **Consequences:** The edited map is always a valid DAG, and the old order minus the cut concept is still a valid order, so the instructor's sequence survives edits. The learner can skip a topic, but not the ordering that made the rest teachable.
 **One-liner:** Cut what you like; what came after it still comes after what came before it.
+
+## ADR-0018: FSRS runs on a day scale for quiz-graded concepts
+**Context:** The defaults in `fsrs` 6.3.2 (MIT) are tuned for flashcards: 1 min / 10 min learning steps, a 10 min relearning step, and random fuzzing. Our "card" is a whole concept reviewed by a quiz. Under the defaults, a Good first quiz is due again in 10 minutes, which floods "N due for review" right after every lesson. Fuzzing also makes tests nondeterministic, and it only helps spread load across large decks.
+**Decision:**
+- `pedagogy.SCHEDULER = Scheduler(learning_steps=(), relearning_steps=(), enable_fuzzing=False)`.
+- Every graded attempt is one FSRS review, retakes included. The first attempt creates the card. With default parameters, first intervals are Again/Hard 1 day, Good 2 days, Easy 8 days.
+- Times are normalized to UTC (fsrs rejects other zones).
+- Failing in the moment is handled by remediation (§4.8), not by short FSRS steps.
+**Alternatives:**
+- Library defaults: these flood the due list.
+- Scheduling only once a concept is solid: this throws away the evidence from weak attempts, which FSRS handles natively as Again/Hard.
+- Fuzzing on: tests become nondeterministic, with no benefit at ≤ 20 concepts per course.
+**Consequences:** Reviews start at least a day out. Default FSRS parameters stay until the P2 optimizer, which needs review logs we don't store yet.
+**One-liner:** Spaced review is measured in days; same-day failure is remediation's job.

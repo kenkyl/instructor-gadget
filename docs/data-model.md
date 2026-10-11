@@ -493,7 +493,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | `last_score` | smallint | yes | 1–4 (combined: the lower of the multiple-choice and short-answer scores) |
 | `attempts` | int | no | Graded attempts so far |
 | `last_attempt_at` | timestamptz | yes | |
-| `fsrs_card` | jsonb | yes | Serialized `fsrs.Card` (§5.5) |
+| `fsrs_card` | jsonb | yes | Serialized `fsrs.Card` (§5.5); null until the first graded attempt |
 | `due` | timestamptz | yes | Next review date, from FSRS |
 
 | Operation | When | How |
@@ -774,7 +774,7 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 
 ### 5.5 FSRS card (stored in `concept_progress.fsrs_card`)
 
-The `fsrs` package (Free Spaced Repetition Scheduler, v6) is serialized with `Card.to_dict()` and restored with `Card.from_dict()`. The rating map is 1 → Again, 2 → Hard, 3 → Good, 4 → Easy.
+The `fsrs` package (Free Spaced Repetition Scheduler, v6) is serialized with `Card.to_dict()` and restored with `Card.from_dict()`. The rating map is 1 → Again, 2 → Hard, 3 → Good, 4 → Easy. The card is created on the first graded attempt (`fsrs_card` and `due` are null until then), and every graded attempt is one review via `pedagogy.schedule_review` (day-scale scheduler, ADR-0018). Reads go through `pedagogy.load_card`, which validates the shape (fsrs `CardDict`) before rebuilding the card.
 
 ```json
 { "card_id": 1760166000123, "state": 2, "step": null, "stability": 3.17, "difficulty": 5.28,
@@ -870,7 +870,7 @@ All enums are `StrEnum`s stored as `VARCHAR(32)` (ADR-0010).
 | `EnrollmentStatus` | active, complete | enrollments.status |
 | `PlanTrigger` | diagnosis, assignment, quiz_result, prereq_override, user_request | plan_versions.trigger |
 | `ConceptStatus` | locked, unlocked, in_progress, complete | concept_progress.status |
-| `Band` | shaky, learning, solid, mastered | concept_progress.band |
+| `Band` | shaky, learning, solid, mastered | concept_progress.band (defined in `agent/types.py`: pedagogy owns it; `pedagogy.band()` sets it) |
 | `LessonKind` | core, remediation | lessons.kind |
 | `CacheResult` | miss, exact_hit, semantic_hit, bypass | lessons.cache_result, llm_calls.cache_result |
 | `CallStatus` | ok, error | llm_calls.status |

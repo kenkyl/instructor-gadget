@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP1 ✅ merged to `main` (PR #2). Next: **CP2 / PC2.1** (`agent/pedagogy.py`: scoring, mastery, bands, unlock gate, FSRS; ★ Kyle: `update_mastery`, `band`, `mcq_score`/`combine`) on branch `cp2/learn-check-adapt` (draft PR #3).
+> **Current status:** CP2 / PC2.1 ✅ (`agent/pedagogy.py`: scoring, mastery, bands, unlock gate, FSRS; ADR-0018). Next: **PC2.2** (`teach-concept` + SSE streaming + exact-match cache + Mermaid) on branch `cp2/learn-check-adapt` (draft PR #3).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
@@ -8,6 +8,8 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 ---
 
 ## CP2 notes (in progress; folded into the CP2 entry when CP2 closes)
+
+- **PC2.1:** checking the installed `fsrs` 6.3.2 source (not memory) showed its defaults are flashcard-scale (1 min / 10 min steps). A Good first quiz would have been "due" 10 minutes later. Fix: a day-scale scheduler (ADR-0018). `Band` moved to `agent/types.py` so `agent/` never imports `app/`. CLAUDE.md, the checkpoint skill and the build plan now say Kyle merges PRs. Kyle skipped the ★ to save time, so the AI wrote `mcq_score`/`combine`/`update_mastery`/`band` against the pre-written tests. Pyright caught a dict literal inferred as `int` instead of `Score`, so the mapping became a typed `MCQ_TO_SCORE` table.
 
 ## CP1: Create a course (Sun 2026-10-11, PR #2)
 

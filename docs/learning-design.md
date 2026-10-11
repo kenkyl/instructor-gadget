@@ -142,7 +142,7 @@ Mastery is the product's estimate of current understanding. It's simple and expl
 - All constants live in config. Tuning them against real outcomes is P2.
 
 ### 4.10 Spaced review
-- Scheduling uses the open-source **`fsrs`** Python package (Free Spaced Repetition Scheduler, from open-spaced-repetition; verify the current API and license). It replaces a hand-rolled scheduler. Rating map: 1 → Again, 2 → Hard, 3 → Good, 4 → Easy.
+- Scheduling uses the open-source **`fsrs`** Python package (Free Spaced Repetition Scheduler, from open-spaced-repetition; verify the current API and license). It replaces a hand-rolled scheduler. Rating map: 1 → Again, 2 → Hard, 3 → Good, 4 → Easy. Every graded attempt is one review, on a day scale: no minute-scale learning steps and no fuzzing (ADR-0018).
 - P1 computes and stores due dates; the dashboard shows "N concepts due for review".
 - *(P2)* **Review session:** due reviews first (interleaved across concepts, as cheap retrieval warm-up), then one new concept, then one transfer question linking the new concept to an earlier one.
 - *(P2)* FSRS parameter optimization from each learner's review history (verify support in `fsrs`).

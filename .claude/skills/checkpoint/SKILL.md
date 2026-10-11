@@ -42,10 +42,10 @@ Run whichever of these exist (check the `Makefile`):
 - **At a CP boundary:**
   1. Update the PR description: what was built, how to verify, decisions.
   2. `gh pr ready`.
-  3. Once CI is green: `gh pr merge --merge --delete-branch`.
-  4. `git switch main && git pull`.
+  3. Once CI is green, tell Kyle the PR is ready to merge, and stop. **Never merge it yourself** (no `gh pr merge`): Kyle reviews and merges with a merge commit.
+  4. After Kyle confirms the merge: `git switch main && git pull`.
   5. Create the next CP branch and open its draft PR.
-- At CP6, after merging, also run `git tag v0.1.0 && git push --tags`.
+- At CP6, after Kyle merges, also run `git tag v0.1.0 && git push --tags`.
 
 ## 5. Post the pair-checkpoint summary, then wait for "go"
 - **Built:** 3–5 bullets.
