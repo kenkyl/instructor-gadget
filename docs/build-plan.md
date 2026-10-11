@@ -19,7 +19,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP | Scope | State |
 |---|---|---|
 | CP0 | Foundations: repo, Postgres + Redis 8, FastAPI + Next.js wiring, CI, data model + migrations + seed, login + Redis sessions + dashboard cache, skill registry + `diagnose` scaffold | ✅ merged |
-| CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ⏳ in progress: PC1.1–1.2 ✅, next PC1.3 (branch `cp1/create-course`) |
+| CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ⏳ in progress: PC1.1–1.3 ✅, next PC1.4 (branch `cp1/create-course`) |
 | CP2 | J2: learn, check, adapt | |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | |
 | CP4 | J3: org course grounded in docs | |
@@ -35,7 +35,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 |---|---|---|
 | PC1.1 | **LLM client wrapper** (`agent/llm.py`): `AsyncAnthropic`; structured output via `output_config.format` (ADR-0013: forced tool use is a 400 on current models), validated against the call's Pydantic output model; one retry that feeds back the validation error; every call logged to `llm_calls` (tokens, latency, cost, status, prompt_version). Then `diagnose.probe` end to end and the intake form with recommended defaults. | — |
 | PC1.2 | `diagnose.assess`: answers on one screen → assessed level, evidence, gaps, and a plain **adjustment message** when the assessment differs from the claim. | — |
-| PC1.3 | `map-concepts` skill + `agent/plan.py` `validate_map`: unknown prereqs, cycles, a topological sequence, total time within ±15% of target. Re-ask once with the errors. | Write the cycle and unknown-prereq check against the tests |
+| PC1.3 | `map-concepts` skill + `agent/plan.py` (`structure_errors`, `time_error`) as `ConceptMap` validators: unknown prereqs, cycles, a topological sequence, total time within ±15% of target. Re-ask once with the errors. | Write the cycle and unknown-prereq check against the tests |
 | PC1.4 | Map editor: remove a concept (warns about its dependents), accept → enrollment + plan v1 + `concept_progress` rows; invalidate the dashboard. | — |
 
 **CP1 done when:** intake → accepted map in under ~90s of LLM time; the prerequisite graph is valid; an over-claimer gets a lower level *and* an explanation.

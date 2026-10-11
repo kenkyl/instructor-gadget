@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP1 in progress on `cp1/create-course` (draft PR #2). PC1.1 ✅ (LLM wrapper + probe + intake), PC1.2 ✅ (`diagnose.assess` + assessment UI). Next: **PC1.3** (`map-concepts` skill + `plan.validate_map`; ★ Kyle writes the cycle and unknown-prereq checks).
+> **Current status:** CP1 in progress on `cp1/create-course` (draft PR #2). PC1.1–1.3 ✅ (wrapper + probe, assess, concept map + `plan.py`). Next: **PC1.4** (map editor: remove a concept with a dependents warning; accept → enrollment + plan v1 + `concept_progress`; invalidate the dashboard). Closes CP1.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
@@ -18,6 +18,11 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 - **AI mistake (PC1.1 verify step):** the Verify step said "your call shows `ok`", but Kyle saw two rows. The second was the AI's own end-to-end test course, left in the dev DB without saying so. Rule: any live test data the AI creates is called out in Verify, or goes in-memory or under a throwaway user (PC1.2's live runs used an in-memory sink).
 - **PC1.2, the prompt failed live runs that fakes would have passed:** the three `assess` eval cases (over-claimer, prompt injection, under-claimer) passed their asserts on the first live run, but reading the outputs showed three problems. The model promised a reassessment the product doesn't offer (→ ADR-0014). It listed untested topics as "gaps". And it said "start at intermediate" for a learner assessed *strong* (it mixed up the starting level with the target level). Each fix was one prompt line, re-run live. Lesson: asserts check the fields; a human still has to read the words.
 - **PC1.2 run-to-run variance:** the same under-claimer answers came out strong, strong, then intermediate across three runs. Each passed, but this is why the CP5 diagnosis eval repeats each persona.
+- **AI mistake caught by its own test (PC1.3):** `time_error` used floats, and `180 * 1.15 == 206.99999999999997`, so a map at exactly +15% would have been rejected and sent for a pointless re-ask. Now integer math.
+- **AI near-miss (PC1.3):** the AI wrote a developer note about cache policy into `SKILL.md`'s body, which is sent to the model as instructions. Moved to a YAML comment; the `new-instructor-skill` skill now warns about it.
+- **PC1.3 ★ tests checked before hand-off:** the AI ran Kyle's tests against a throwaway reference implementation, loaded only for that run, to prove they're consistent and passable, without putting an answer in the repo.
+- **PC1.3 ★ (Kyle):** implemented `find_unknown_prereqs` and an iterative three-state DFS `find_cycle` (on-path / done), and **added a test the AI's suite missed**: a concept leading *into* a loop must be trimmed from the reported cycle, or the re-ask would blame the wrong concept.
+- **PC1.3 live maps:** valid on the first attempt (11.9 s / $0.021 for a 3 h foundation map; 7.6 s / $0.016 for cram). J1 total LLM time ≈ 24 s, against the 90 s target. Quality note: both maps chain early concepts linearly (e.g. "golden signals" needs "severity triage"), which the prompt warns against. Candidate for a CP5 judge ("is each prereq a real dependency?").
 
 ## CP0: Foundations (Sat 2026-10-10 → Sun 2026-10-11, PR #1)
 

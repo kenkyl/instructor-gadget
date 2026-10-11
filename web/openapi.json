@@ -505,6 +505,66 @@
           }
         }
       }
+    },
+    "/api/courses/{course_id}/map": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Map Concepts",
+        "description": "Generate the concept map (once; afterwards the same map is returned).",
+        "operationId": "map_concepts_api_courses__course_id__map_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -626,6 +686,112 @@
         ],
         "title": "CallInfo"
       },
+      "Concept": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "title": "Id",
+            "description": "Short kebab-case slug"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Title"
+          },
+          "mastery_statement": {
+            "type": "string",
+            "title": "Mastery Statement",
+            "description": "Observable outcome, starting \"You can \u2026\""
+          },
+          "objective_level": {
+            "type": "string",
+            "enum": [
+              "remember",
+              "understand",
+              "apply",
+              "analyze",
+              "evaluate",
+              "create"
+            ],
+            "title": "Objective Level",
+            "description": "Bloom level of the mastery statement's verb"
+          },
+          "prereqs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prereqs",
+            "description": "Ids of direct prerequisites in this map"
+          },
+          "est_minutes": {
+            "type": "integer",
+            "maximum": 120.0,
+            "minimum": 5.0,
+            "title": "Est Minutes",
+            "description": "Lesson + quiz time"
+          },
+          "concept_type": {
+            "type": "string",
+            "enum": [
+              "algorithm",
+              "systems",
+              "math",
+              "syntax",
+              "api",
+              "conceptual"
+            ],
+            "title": "Concept Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "mastery_statement",
+          "objective_level",
+          "prereqs",
+          "est_minutes",
+          "concept_type"
+        ],
+        "title": "Concept"
+      },
+      "ConceptMap": {
+        "properties": {
+          "concepts": {
+            "items": {
+              "$ref": "#/components/schemas/Concept"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Concepts"
+          },
+          "sequence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sequence",
+            "description": "Every concept id once, each after its prereqs"
+          },
+          "sequence_rationale": {
+            "type": "string",
+            "title": "Sequence Rationale",
+            "description": "Why this order, written to the learner"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concepts",
+          "sequence",
+          "sequence_rationale"
+        ],
+        "title": "ConceptMap",
+        "description": "Stored in courses.template_plan and plan_versions.plan. These graph rules hold for\nevery stored map, including after the learner cuts concepts (PC1.4)."
+      },
       "CourseConfig": {
         "properties": {
           "topic": {
@@ -716,6 +882,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/AssessOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "concept_map": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConceptMap"
               },
               {
                 "type": "null"

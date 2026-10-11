@@ -208,3 +208,13 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Check in the service after the call: no retry, so a fixable error becomes a 502.
 **Consequences:** Request-aware rules stay next to the schema they protect, are unit-testable, and get a retry for free. `map-concepts` can use the same hook (e.g. concept ids referenced by gaps).
 **One-liner:** The output is checked against the question it was answering, and a mismatch earns one retry instead of a silent fix.
+
+## ADR-0016: `courses.template_plan` holds every course's base map
+**Context:** A generated concept map needs a home before the learner accepts it. `plan_versions` belong to an enrollment (ADR-0004), and a personal course has no enrollment until accept (PC1.4). `template_plan` was documented as "org courses only: the admin-accepted map".
+**Decision:** `template_plan` is the course's **base `ConceptMap`** for both scopes: proposed while the course is `mapped`, and final once accepted (`active`). Accepting copies it into the learner's plan v1. For org courses, every assigned learner's enrollment copies it. `courses.status` says which state it's in.
+**Alternatives:**
+- A new `proposed_plan` column: a migration, and two columns for the same idea.
+- A plan version 0 with no enrollment: breaks the "plans belong to an enrollment" rule.
+- Creating the enrollment before accept: the dashboard would list courses the learner never committed to.
+**Consequences:** No migration, and personal and org courses follow one path: generate → (edit) → accept → copy into the enrollment. Edits before accept (PC1.4) change `template_plan`; after accept, they're plan versions.
+**One-liner:** The course owns the starting map; each learner's enrollment owns their copy of it.

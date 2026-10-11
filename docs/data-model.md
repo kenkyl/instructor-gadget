@@ -363,7 +363,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | `config` | jsonb | no | `CourseConfig` (§5.1): the intake knobs |
 | `mission` | jsonb | no | `Mission` (§5.1): goal, what "expert" means, mode, analogy domain |
 | `status` | varchar(32) | no | `draft` → `probed` → `assessed` → `mapped` → `active` |
-| `template_plan` | jsonb | yes | Org courses only: the admin-accepted `ConceptMap`, copied into each learner's enrollment |
+| `template_plan` | jsonb | yes | The course's base `ConceptMap` (ADR-0016): proposed while `mapped`, final once accepted; each enrollment copies it into plan v1. For org courses, the admin-accepted map |
 | `doc_ids` | jsonb | no | Org doc ids used for grounding (default `[]`) |
 | `doc_set_hash` | varchar(64) | yes | Hash of the grounding doc set; part of the semantic cache bucket |
 | `created_at`, `updated_at` | timestamptz | no | `updated_at` is set on every update |
@@ -373,7 +373,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | Operation | When | How |
 |---|---|---|
 | Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner |
-| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map, and accept (🔜 PC1.3–1.4) | `status` advances; `template_plan` is set when an admin accepts (🔜 PC4.3) |
+| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, `POST /api/courses/{id}/map`, once only), and accept (🔜 PC1.4) | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`), edited before accept (🔜 PC1.4) |
 | Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; list by owner or org |
 
 ```json
@@ -734,10 +734,10 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | | `prereqs` | list[str] | Must reference known ids; no cycles (checked in `plan.py`) |
 | | `est_minutes` | int (5–120) | Total within ±15% of `target_hours` |
 | | `concept_type` | algorithm \| systems \| math \| syntax \| api \| conceptual | Determines the prototype style |
-| | `cites` | list[{doc, section}] | Grounded courses only |
-| | `kind` | core \| remediation | Set by code, not the model |
-| ConceptMap | `concepts` | list[Concept] (6–20) | |
-| | `sequence` | list[str] | A dependency-respecting order |
+| | `cites` | list[{doc, section}] | Grounded courses only (🔜 CP4) |
+| | `kind` | core \| remediation | Set by code, not the model (🔜 PC2.5; absent means core) |
+| ConceptMap | `concepts` | list[Concept] (1–20 stored; **6–12 when generated**, `MapOutput`) | Ids unique kebab-case slugs. Defined in `agent/types.py` (the skill folder isn't importable) |
+| | `sequence` | list[str] | Every concept id once, each after its prereqs (validated in `plan.py`) |
 | | `sequence_rationale` | str | Shown to the learner |
 | PlanDiff | `added` / `removed` | list[Concept] / list[str] | |
 | | `prereq_changes` | list[{concept_id, added[], removed[]}] | |

@@ -1,4 +1,4 @@
-"""Course creation (J1): intake → diagnostic probe → assessment. Map and accept: PC1.3–1.4.
+"""Course creation (J1): intake → diagnostic probe → assessment → concept map. Accept: PC1.4.
 
 Surface-neutral: the web router calls these, and a future MCP surface can too. Ownership is
 checked here, so every surface gets the same rule.
@@ -20,7 +20,7 @@ from agent.skills.diagnose.schema import (
     ProbeInput,
     ProbeOutput,
 )
-from agent.types import CourseConfig, Mission
+from agent.types import ConceptMap, CourseConfig, MapInput, MapOutput, Mission
 from app.auth import CurrentUser
 from app.models import Assessment, Course, CourseScope, CourseStatus
 
@@ -57,6 +57,7 @@ class CourseDetail(BaseModel):
     # Shown to the learner in full: level, evidence, gaps and the adjustment message
     # (transparency over smoothness, spec §4.3).
     assessment: AssessOutput | None = None
+    concept_map: ConceptMap | None = None  # the proposed map, until accepted (PC1.4)
 
 
 async def create_course(db: AsyncSession, user: CurrentUser, intake: CourseIntake) -> Course:
@@ -161,6 +162,37 @@ async def run_assess(
     return assessment
 
 
+async def run_map(db: AsyncSession, llm: LLMClient, user: CurrentUser, course: Course) -> Course:
+    """Generate the concept map once, from the intake and the assessment. Stored as the
+    course's base map (`template_plan`), which accept copies into the learner's plan v1."""
+    if course.template_plan is not None:
+        return course
+    assessment = await latest_assessment(db, course.id, user.id)
+    if assessment is None or assessment.result is None:
+        raise HTTPException(409, "Submit your diagnostic answers first.")
+
+    config = CourseConfig.model_validate(course.config)
+    result = AssessOutput.model_validate(assessment.result)
+    cmap = await llm.run(
+        "map-concepts",
+        "map",
+        MapInput(
+            config=config,
+            mission=Mission.model_validate(course.mission),
+            assessed_level=result.assessed_level,
+            gaps=result.gaps,
+            target_minutes=round(config.target_hours * 60),
+        ),
+        MapOutput,
+        ctx=CallContext(user_id=user.id, course_id=course.id),
+    )
+    # Store as the general ConceptMap shape (no generation-only bounds) so later edits validate.
+    course.template_plan = ConceptMap.model_validate(cmap.model_dump()).model_dump(mode="json")
+    course.status = CourseStatus.mapped
+    await db.commit()
+    return course
+
+
 async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> CourseDetail:
     assessment = await latest_assessment(db, course.id, user.id)
     questions: list[ProbeQuestionView] = []
@@ -182,4 +214,7 @@ async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> 
         questions=questions,
         answers=answers,
         assessment=result,
+        concept_map=(
+            ConceptMap.model_validate(course.template_plan) if course.template_plan else None
+        ),
     )

@@ -1,10 +1,11 @@
 "use client";
 
-// J1 rounds 2–3 on one page (spec §4.2–4.3):
+// J1 after intake, on one page (spec §4.2–4.4):
 //   draft    → write the diagnostic questions
 //   probed   → answer them all on one screen
 //   assessed → the demonstrated level, why, and the gaps. If it differs from the claim the
 //              instructor says so plainly (no silent re-levelling). Answers are then locked.
+//   mapped   → the concept map: a dependency-ordered list with the reasoning for the order.
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -17,6 +18,7 @@ import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
 
 type CourseDetail = Schemas["CourseDetail"];
 type Assessment = Schemas["AssessOutput"];
+type ConceptMap = Schemas["ConceptMap"];
 
 export default function CoursePage() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +59,7 @@ export default function CoursePage() {
 
   const questions = course.questions ?? [];
   const assessment = course.assessment ?? null;
+  const conceptMap = course.concept_map ?? null;
   const { config, mission } = course;
 
   return (
@@ -90,6 +93,20 @@ export default function CoursePage() {
       ) : (
         <>
           {assessment && <AssessmentCard assessment={assessment} />}
+          {conceptMap && (
+            <ConceptMapCard map={conceptMap} targetMinutes={Math.round(config.target_hours * 60)} />
+          )}
+          {assessment && !conceptMap && (
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => post("map", "Planning your course…")}
+                disabled={busy !== null}
+              >
+                {busy ?? "Build my concept map"}
+              </Button>
+              {error && <span className="text-destructive text-sm">{error}</span>}
+            </div>
+          )}
 
           <form onSubmit={submitAnswers} className="space-y-4">
             {!assessment && (
@@ -184,8 +201,49 @@ function AssessmentCard({ assessment: a }: { assessment: Assessment }) {
             </ul>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConceptMapCard({ map, targetMinutes }: { map: ConceptMap; targetMinutes: number }) {
+  const byId = new Map(map.concepts.map((c) => [c.id, c]));
+  const total = map.concepts.reduce((sum, c) => sum + c.est_minutes, 0);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Your concept map</CardTitle>
+        <CardDescription>
+          {map.concepts.length} concepts · {total} min (target {targetMinutes})
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <p>{map.sequence_rationale}</p>
+        <ol className="space-y-3">
+          {map.sequence.map((id, i) => {
+            const c = byId.get(id);
+            if (!c) return null;
+            return (
+              <li key={id} className="border-l-2 pl-3 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground">{i + 1}.</span>
+                  <span className="font-medium">{c.title}</span>
+                  <Badge variant="outline">{c.est_minutes} min</Badge>
+                  <Badge variant="secondary">{c.concept_type}</Badge>
+                  <Badge variant="secondary">{c.objective_level}</Badge>
+                </div>
+                <p>{c.mastery_statement}</p>
+                {c.prereqs.length > 0 && (
+                  <p className="text-muted-foreground text-xs">
+                    Needs: {c.prereqs.map((p) => byId.get(p)?.title ?? p).join(", ")}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ol>
         <p className="text-muted-foreground text-xs">
-          Next: the instructor builds your concept map from this (coming in the next checkpoint).
+          Next: remove concepts you don’t want, then accept (coming in the next checkpoint).
         </p>
       </CardContent>
     </Card>

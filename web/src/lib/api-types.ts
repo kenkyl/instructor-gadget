@@ -200,6 +200,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courses/{course_id}/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Map Concepts
+         * @description Generate the concept map (once; afterwards the same map is returned).
+         */
+        post: operations["map_concepts_api_courses__course_id__map_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -252,6 +272,61 @@ export interface components {
             /** Prompt Version */
             prompt_version: string;
         };
+        /** Concept */
+        Concept: {
+            /**
+             * Id
+             * @description Short kebab-case slug
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Mastery Statement
+             * @description Observable outcome, starting "You can …"
+             */
+            mastery_statement: string;
+            /**
+             * Objective Level
+             * @description Bloom level of the mastery statement's verb
+             * @enum {string}
+             */
+            objective_level: "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create";
+            /**
+             * Prereqs
+             * @description Ids of direct prerequisites in this map
+             */
+            prereqs: string[];
+            /**
+             * Est Minutes
+             * @description Lesson + quiz time
+             */
+            est_minutes: number;
+            /**
+             * Concept Type
+             * @enum {string}
+             */
+            concept_type: "algorithm" | "systems" | "math" | "syntax" | "api" | "conceptual";
+        };
+        /**
+         * ConceptMap
+         * @description Stored in courses.template_plan and plan_versions.plan. These graph rules hold for
+         *     every stored map, including after the learner cuts concepts (PC1.4).
+         */
+        ConceptMap: {
+            /** Concepts */
+            concepts: components["schemas"]["Concept"][];
+            /**
+             * Sequence
+             * @description Every concept id once, each after its prereqs
+             */
+            sequence: string[];
+            /**
+             * Sequence Rationale
+             * @description Why this order, written to the learner
+             */
+            sequence_rationale: string;
+        };
         /**
          * CourseConfig
          * @description Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration.
@@ -298,6 +373,7 @@ export interface components {
                 [key: string]: string;
             };
             assessment?: components["schemas"]["AssessOutput"] | null;
+            concept_map?: components["schemas"]["ConceptMap"] | null;
         };
         /**
          * CourseIntake
@@ -801,6 +877,39 @@ export interface operations {
                 "application/json": components["schemas"]["AnswersIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    map_concepts_api_courses__course_id__map_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

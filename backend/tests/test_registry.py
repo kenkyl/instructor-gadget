@@ -24,6 +24,19 @@ def test_diagnose_loads() -> None:
     assert re.fullmatch(r"diagnose@\d+\.\d+\.\d+\+[0-9a-f]{8}", version)
 
 
+def test_map_concepts_loads() -> None:
+    from agent.types import MapInput, MapOutput
+
+    reg = Registry()
+    call = reg.call("map-concepts", "map")
+    assert call.spec.cache == "never"
+    # The kebab-case folder's schema re-exports the importable contract: one class, not two.
+    assert (call.input_model, call.output_model) == (MapInput, MapOutput)
+    version = reg.prompt_version("map-concepts", "map")
+    print(f"\nmap-concepts.map prompt_version = {version}")
+    assert re.fullmatch(r"map-concepts@\d+\.\d+\.\d+\+[0-9a-f]{8}", version)
+
+
 def test_system_prompt_composes_conduct_skill_and_call() -> None:
     prompt = Registry().system_prompt("diagnose", "assess")
     assert prompt.index("Instructor conduct rules") < prompt.index("# Skill: diagnose")

@@ -17,6 +17,7 @@ from app.services.courses import (
     create_course,
     get_owned_course,
     run_assess,
+    run_map,
     run_probe,
 )
 
@@ -67,4 +68,18 @@ async def assess(
         raise HTTPException(422, "The instructor can't assess these answers.") from err
     except LLMError as err:
         raise HTTPException(502, "The instructor couldn't assess your answers. Try again.") from err
+    return await course_detail(db, user, course)
+
+
+@router.post("/{course_id}/map")
+async def map_concepts(
+    course: OwnedCourseDep, user: CurrentUserDep, db: Db, llm: LlmDep
+) -> CourseDetail:
+    """Generate the concept map (once; afterwards the same map is returned)."""
+    try:
+        await run_map(db, llm, user, course)
+    except LLMRefusal as err:
+        raise HTTPException(422, "The instructor can't plan this course.") from err
+    except LLMError as err:
+        raise HTTPException(502, "The instructor couldn't build your map. Try again.") from err
     return await course_detail(db, user, course)

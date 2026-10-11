@@ -189,7 +189,8 @@ class Course(Base):
     config: Mapped[dict[str, Any]] = mapped_column(default=dict)  # CourseConfig (Pydantic)
     mission: Mapped[dict[str, Any]] = mapped_column(default=dict)  # Mission (Pydantic)
     status: Mapped[CourseStatus] = mapped_column(str_enum(CourseStatus), default=CourseStatus.draft)
-    template_plan: Mapped[dict[str, Any] | None]  # org courses: admin-accepted ConceptMap
+    # The course's base ConceptMap: proposed until accepted; each enrollment copies it (ADR-0016)
+    template_plan: Mapped[dict[str, Any] | None]
     doc_ids: Mapped[list[Any]] = mapped_column(default=list)
     doc_set_hash: Mapped[str | None] = mapped_column(String(64))  # part of the cache bucket
     created_at: Mapped[datetime] = created_at()

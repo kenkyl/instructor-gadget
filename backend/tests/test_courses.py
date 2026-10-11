@@ -190,3 +190,76 @@ def test_assess_before_probe_is_409(client, fake_llm: FakeAnthropic) -> None:
     course_id = client.post("/api/courses", json=INTAKE).json()["id"]
     resp = client.post(f"/api/courses/{course_id}/assess", json={"answers": ANSWERS})
     assert resp.status_code == 409
+
+
+def concept(cid: str, prereqs: list[str], minutes: int = 30) -> dict:
+    return {
+        "id": cid,
+        "title": cid.replace("-", " ").title(),
+        "mastery_statement": f"You can explain {cid} and apply it to a new case.",
+        "objective_level": "apply",
+        "prereqs": prereqs,
+        "est_minutes": minutes,
+        "concept_type": "systems",
+    }
+
+
+IDS = ["cache-aside", "ttls", "eviction", "invalidation", "stampedes", "write-through"]
+# 6 concepts x 30 min = 180 = the intake's default 3 h target.
+GOOD_MAP = {
+    "concepts": [concept(c, [IDS[i - 1]] if i else []) for i, c in enumerate(IDS)],
+    "sequence": IDS,
+    "sequence_rationale": "You start with cache-aside because your answers showed gaps there.",
+}
+
+
+def _assessed_course(client, fake_llm: FakeAnthropic) -> str:
+    course_id = _probed_course(client, fake_llm)
+    fake_llm.reply(message(OVERCLAIM))
+    client.post(f"/api/courses/{course_id}/assess", json={"answers": ANSWERS})
+    return course_id
+
+
+def test_map_is_generated_from_the_assessment(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _assessed_course(client, fake_llm)
+    fake_llm.reply(message(GOOD_MAP))
+
+    detail = client.post(f"/api/courses/{course_id}/map").json()
+
+    assert detail["status"] == "mapped"
+    assert detail["concept_map"]["sequence"] == IDS
+    sent = fake_llm.requests[-1]["messages"][0]["content"]
+    assert '"assessed_level": "novice"' in sent  # the demonstrated level, not the claim
+    assert '"target_minutes": 180' in sent  # computed in code
+    # Idempotent, like probe and assess.
+    client.post(f"/api/courses/{course_id}/map")
+    assert len(fake_llm.requests) == 3
+
+
+def test_map_over_time_budget_is_re_asked(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _assessed_course(client, fake_llm)
+    too_long = {**GOOD_MAP, "concepts": [concept(c, []) | {"est_minutes": 60} for c in IDS]}
+    fake_llm.reply(message(too_long), message(GOOD_MAP))
+
+    assert client.post(f"/api/courses/{course_id}/map").json()["status"] == "mapped"
+    retry = fake_llm.requests[-1]["messages"][-1]["content"]
+    assert "est_minutes add up to 360" in retry
+
+
+def test_map_with_unknown_prereq_is_re_asked(client, fake_llm: FakeAnthropic) -> None:
+    """★ PC1.3: passes once find_unknown_prereqs is implemented (agent/plan.py)."""
+    course_id = _assessed_course(client, fake_llm)
+    bad = {
+        **GOOD_MAP,
+        "concepts": [*GOOD_MAP["concepts"][:-1], concept("write-through", ["ghost"])],
+    }
+    fake_llm.reply(message(bad), message(GOOD_MAP))
+
+    assert client.post(f"/api/courses/{course_id}/map").json()["status"] == "mapped"
+    retry = fake_llm.requests[-1]["messages"][-1]["content"]
+    assert "'write-through' lists unknown prereq 'ghost'" in retry
+
+
+def test_map_before_assessment_is_409(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _probed_course(client, fake_llm)
+    assert client.post(f"/api/courses/{course_id}/map").status_code == 409
