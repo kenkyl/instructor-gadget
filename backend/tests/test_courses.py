@@ -2,10 +2,11 @@
 
 import asyncio
 import uuid
+from collections.abc import Sequence
 
 import pytest
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import Row, Select, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from agent.llm import LLMClient
@@ -13,7 +14,7 @@ from agent.registry import get_registry
 from app.config import get_settings
 from app.deps import get_llm
 from app.main import app
-from app.models import LlmCall
+from app.models import ConceptProgress, LlmCall, PlanVersion
 from app.services.llm_log import DbCallSink
 from tests.llm_fakes import FakeAnthropic, message
 from tests.test_llm import GOOD_PROBE, SHORT_PROBE, assessed
@@ -263,3 +264,111 @@ def test_map_with_unknown_prereq_is_re_asked(client, fake_llm: FakeAnthropic) ->
 def test_map_before_assessment_is_409(client, fake_llm: FakeAnthropic) -> None:
     course_id = _probed_course(client, fake_llm)
     assert client.post(f"/api/courses/{course_id}/map").status_code == 409
+
+
+def _mapped_course(client, fake_llm: FakeAnthropic) -> str:
+    course_id = _assessed_course(client, fake_llm)
+    fake_llm.reply(message(GOOD_MAP))
+    client.post(f"/api/courses/{course_id}/map")
+    return course_id
+
+
+def _concepts(detail: dict) -> dict[str, list[str]]:
+    return {c["id"]: c["prereqs"] for c in detail["concept_map"]["concepts"]}
+
+
+def test_removing_a_concept_rewires_its_dependents(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _mapped_course(client, fake_llm)
+    # GOOD_MAP is a chain: ... ttls <- eviction <- invalidation ...
+    detail = client.delete(f"/api/courses/{course_id}/map/concepts/eviction").json()
+
+    assert "eviction" not in _concepts(detail)
+    assert _concepts(detail)["invalidation"] == ["ttls"]  # inherited eviction's prereq
+    assert "eviction" not in detail["concept_map"]["sequence"]
+    # Persisted, not just returned.
+    assert _concepts(client.get(f"/api/courses/{course_id}").json())["invalidation"] == ["ttls"]
+
+
+def test_remove_rejects_unknown_and_last_concepts(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _mapped_course(client, fake_llm)
+    assert client.delete(f"/api/courses/{course_id}/map/concepts/nope").status_code == 404
+    for cid in IDS[:-1]:
+        assert client.delete(f"/api/courses/{course_id}/map/concepts/{cid}").status_code == 200
+    assert client.delete(f"/api/courses/{course_id}/map/concepts/{IDS[-1]}").status_code == 422
+
+
+def test_accept_creates_the_enrollment_plan_and_progress(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _mapped_course(client, fake_llm)
+    client.delete(f"/api/courses/{course_id}/map/concepts/write-through")
+
+    def cards() -> list[dict]:
+        dash = client.get("/api/dashboard").json()
+        return [c for c in dash["courses"] if c["course_id"] == course_id]
+
+    assert cards() == []  # not on the dashboard until accepted
+
+    detail = client.post(f"/api/courses/{course_id}/accept").json()
+
+    assert detail["status"] == "active"
+    assert detail["enrollment_id"] is not None
+    rows = _progress(detail["enrollment_id"])
+    assert rows == {
+        "cache-aside": "unlocked",  # the only concept without prereqs
+        "ttls": "locked",
+        "eviction": "locked",
+        "invalidation": "locked",
+        "stampedes": "locked",
+    }
+    version, trigger, n_concepts = _plan_v1(detail["enrollment_id"])
+    assert (version, trigger, n_concepts) == (1, "diagnosis", 5)  # the edited map, copied
+
+    # The dashboard cache was invalidated, so the new course shows up immediately.
+    assert client.get("/api/dashboard").json()["served_from"] == "db"
+    [card] = cards()
+    assert (card["title"], card["concepts_total"]) == ("Redis caching patterns", 5)
+
+
+def test_accept_is_idempotent_and_locks_the_map(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _mapped_course(client, fake_llm)
+    first = client.post(f"/api/courses/{course_id}/accept").json()
+    again = client.post(f"/api/courses/{course_id}/accept").json()
+    assert again["enrollment_id"] == first["enrollment_id"]
+    # After accept, changes are plan versions (CP2), not edits to the base map.
+    assert client.delete(f"/api/courses/{course_id}/map/concepts/ttls").status_code == 409
+
+
+def test_accept_before_map_is_409(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _assessed_course(client, fake_llm)
+    assert client.post(f"/api/courses/{course_id}/accept").status_code == 409
+
+
+def _db[*Ts](query: Select[*Ts]) -> Sequence[Row[*Ts]]:
+    async def run() -> Sequence[Row[*Ts]]:
+        engine = create_async_engine(get_settings().database_url)
+        try:
+            async with engine.connect() as conn:
+                return (await conn.execute(query)).all()
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(run())
+
+
+def _progress(enrollment_id: str) -> dict[str, str]:
+    rows = _db(
+        select(ConceptProgress.concept_id, ConceptProgress.status).where(
+            ConceptProgress.enrollment_id == uuid.UUID(enrollment_id)
+        )
+    )
+    return {row[0]: str(row[1]) for row in rows}
+
+
+def _plan_v1(enrollment_id: str) -> tuple[int, str, int]:
+    rows = _db(
+        select(PlanVersion.version, PlanVersion.trigger, PlanVersion.plan).where(
+            PlanVersion.enrollment_id == uuid.UUID(enrollment_id)
+        )
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    return row[0], str(row[1]), len(row[2]["concepts"])

@@ -1,4 +1,4 @@
-"""Course creation (J1): intake → diagnostic probe → assessment → concept map. Accept: PC1.4.
+"""Course creation (J1): intake → diagnostic probe → assessment → concept map → edit → accept.
 
 Surface-neutral: the web router calls these, and a future MCP surface can too. Ownership is
 checked here, so every surface gets the same rule.
@@ -9,9 +9,11 @@ from typing import Annotated
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent import pedagogy, plan
 from agent.llm import CallContext, LLMClient
 from agent.skills.diagnose.schema import (
     AssessInput,
@@ -22,7 +24,19 @@ from agent.skills.diagnose.schema import (
 )
 from agent.types import ConceptMap, CourseConfig, MapInput, MapOutput, Mission
 from app.auth import CurrentUser
-from app.models import Assessment, Course, CourseScope, CourseStatus
+from app.models import (
+    Assessment,
+    ConceptProgress,
+    ConceptStatus,
+    Course,
+    CourseScope,
+    CourseStatus,
+    Enrollment,
+    EnrollmentSource,
+    PlanTrigger,
+    PlanVersion,
+)
+from app.services.dashboard import invalidate_dashboard
 
 
 class CourseIntake(BaseModel):
@@ -57,7 +71,8 @@ class CourseDetail(BaseModel):
     # Shown to the learner in full: level, evidence, gaps and the adjustment message
     # (transparency over smoothness, spec §4.3).
     assessment: AssessOutput | None = None
-    concept_map: ConceptMap | None = None  # the proposed map, until accepted (PC1.4)
+    concept_map: ConceptMap | None = None  # proposed while `mapped`; final once `active`
+    enrollment_id: uuid.UUID | None = None  # set once the learner accepts the map
 
 
 async def create_course(db: AsyncSession, user: CurrentUser, intake: CourseIntake) -> Course:
@@ -193,6 +208,74 @@ async def run_map(db: AsyncSession, llm: LLMClient, user: CurrentUser, course: C
     return course
 
 
+def _editable_map(course: Course) -> ConceptMap:
+    if course.status != CourseStatus.mapped or course.template_plan is None:
+        raise HTTPException(409, "The map can only be edited before you accept it.")
+    return ConceptMap.model_validate(course.template_plan)
+
+
+async def remove_concept(db: AsyncSession, course: Course, concept_id: str) -> Course:
+    """Cut a concept before accept. Its dependents inherit its prereqs (ADR-0017), so the map
+    stays a valid DAG and the old order minus this concept is still a valid order."""
+    cmap = _editable_map(course)
+    if concept_id not in {c.id for c in cmap.concepts}:
+        raise HTTPException(404, "concept not in this map")
+    if len(cmap.concepts) == 1:
+        raise HTTPException(422, "A course needs at least one concept.")
+
+    graph = plan.remove_concept(cmap.graph(), concept_id)
+    edited = ConceptMap(
+        concepts=[
+            c.model_copy(update={"prereqs": graph[c.id]}) for c in cmap.concepts if c.id in graph
+        ],
+        sequence=[c for c in cmap.sequence if c != concept_id],
+        sequence_rationale=cmap.sequence_rationale,
+    )  # validators re-check the graph rules on the edited map
+    course.template_plan = edited.model_dump(mode="json")
+    await db.commit()
+    return course
+
+
+async def accept_map(db: AsyncSession, redis: Redis, user: CurrentUser, course: Course) -> Course:
+    """Accept the map: the course becomes this learner's. One transaction creates the
+    enrollment, plan v1 (a copy of the base map, ADR-0016) and one progress row per concept."""
+    if course.status == CourseStatus.active:
+        return course  # already accepted
+    cmap = _editable_map(course)
+
+    enrollment = Enrollment(
+        course_id=course.id,
+        user_id=user.id,
+        source=EnrollmentSource.owner,
+        current_plan_version=1,
+    )
+    db.add(enrollment)
+    await db.flush()  # assigns enrollment.id for the rows below
+    db.add(
+        PlanVersion(
+            enrollment_id=enrollment.id,
+            version=1,
+            plan=cmap.model_dump(mode="json"),
+            trigger=PlanTrigger.diagnosis,
+            reason=cmap.sequence_rationale,  # v1's "why" is the instructor's reasoning
+        )
+    )
+    unlocked = pedagogy.initially_unlocked(cmap.graph())
+    db.add_all(
+        ConceptProgress(
+            enrollment_id=enrollment.id,
+            concept_id=c.id,
+            status=ConceptStatus.unlocked if c.id in unlocked else ConceptStatus.locked,
+        )
+        for c in cmap.concepts
+    )
+    course.status = CourseStatus.active
+    await db.commit()
+    # After the commit: delete, don't patch (cache-aside). The next dashboard read rebuilds.
+    await invalidate_dashboard(redis, user.id)
+    return course
+
+
 async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> CourseDetail:
     assessment = await latest_assessment(db, course.id, user.id)
     questions: list[ProbeQuestionView] = []
@@ -205,6 +288,11 @@ async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> 
         answers = assessment.answers or {}
         if assessment.result is not None:
             result = AssessOutput.model_validate(assessment.result)
+    enrollment_id = await db.scalar(
+        select(Enrollment.id).where(
+            Enrollment.course_id == course.id, Enrollment.user_id == user.id
+        )
+    )
     return CourseDetail(
         id=course.id,
         title=course.title,
@@ -217,4 +305,5 @@ async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> 
         concept_map=(
             ConceptMap.model_validate(course.template_plan) if course.template_plan else None
         ),
+        enrollment_id=enrollment_id,
     )

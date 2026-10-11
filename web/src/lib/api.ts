@@ -41,3 +41,4 @@ async function errorMessage(res: Response, what: string): Promise<string> {
 
 export const apiGet = <T>(path: string) => request<T>("GET", path);
 export const apiPost = <T>(path: string, body?: unknown) => request<T>("POST", path, body);
+export const apiDelete = <T>(path: string) => request<T>("DELETE", path);

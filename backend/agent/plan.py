@@ -112,3 +112,27 @@ def structure_errors(graph: Graph, sequence: Sequence[str]) -> list[str]:
     else:  # with a cycle there's no valid order, so order errors would only be noise
         errors.extend(sequence_errors(graph, sequence))
     return errors
+
+
+def dependents(graph: Graph, concept_id: str) -> list[str]:
+    """Concepts that list `concept_id` as a direct prereq, in graph order."""
+    return [c for c, prereqs in graph.items() if concept_id in prereqs]
+
+
+def remove_concept(graph: Graph, concept_id: str) -> dict[str, list[str]]:
+    """The graph without `concept_id`, with its dependents rewired (ADR-0017).
+
+    Each dependent inherits the removed concept's own prereqs, so ordering still holds:
+    A ← B ← C, remove B  =>  A ← C. Duplicates are dropped and order is kept, so a dependent
+    that already needed A doesn't list it twice.
+    """
+    inherited = list(graph.get(concept_id, []))
+    rewired: dict[str, list[str]] = {}
+    for c, prereqs in graph.items():
+        if c == concept_id:
+            continue
+        if concept_id in prereqs:
+            merged = [p for p in prereqs if p != concept_id] + inherited
+            prereqs = list(dict.fromkeys(merged))
+        rewired[c] = list(prereqs)
+    return rewired

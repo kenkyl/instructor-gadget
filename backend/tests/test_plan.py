@@ -1,6 +1,14 @@
 """agent/plan.py: the deterministic concept-map rules (spec §4.4)."""
 
-from agent.plan import find_cycle, find_unknown_prereqs, sequence_errors, time_error
+from agent.pedagogy import initially_unlocked
+from agent.plan import (
+    dependents,
+    find_cycle,
+    find_unknown_prereqs,
+    remove_concept,
+    sequence_errors,
+    time_error,
+)
 
 
 def assert_is_cycle(graph: dict[str, list[str]], path: list[str] | None) -> None:
@@ -93,3 +101,37 @@ def test_time_within_fifteen_percent() -> None:
     assert time_error(207, 180) is None  # +15% exactly
     err = time_error(240, 180)
     assert err is not None and "add up to 240" in err and "153–207" in err
+
+
+# --- PC1.4: removing a concept (ADR-0017) --------------------------------------------------
+def test_dependents_are_direct_only() -> None:
+    graph = {"a": [], "b": ["a"], "c": ["b"], "d": ["a", "c"]}
+    assert dependents(graph, "a") == ["b", "d"]
+    assert dependents(graph, "d") == []
+
+
+def test_removing_a_middle_concept_rewires_its_dependents() -> None:
+    # A <- B <- C, cut B: C inherits A, so C still comes after A.
+    assert remove_concept({"a": [], "b": ["a"], "c": ["b"]}, "b") == {"a": [], "c": ["a"]}
+
+
+def test_removing_a_root_frees_its_dependents() -> None:
+    assert remove_concept({"a": [], "b": ["a"], "c": ["a", "b"]}, "a") == {"b": [], "c": ["b"]}
+
+
+def test_rewiring_drops_duplicates_and_keeps_order() -> None:
+    graph = {"a": [], "x": [], "b": ["a", "x"], "c": ["x", "b"]}
+    # c needed x and b; b needed a and x. Without b, c needs x (already there) and a.
+    assert remove_concept(graph, "b")["c"] == ["x", "a"]
+
+
+def test_rewired_graph_stays_valid() -> None:
+    graph = {"a": [], "b": ["a"], "c": ["b"], "d": ["b", "c"]}
+    after = remove_concept(graph, "b")
+    assert find_unknown_prereqs(after) == []
+    assert find_cycle(after) is None
+    assert sequence_errors(after, ["a", "c", "d"]) == []  # the old order minus b still works
+
+
+def test_only_concepts_without_prereqs_start_unlocked() -> None:
+    assert initially_unlocked({"a": [], "b": ["a"], "c": [], "d": ["b", "c"]}) == {"a", "c"}

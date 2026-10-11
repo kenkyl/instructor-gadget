@@ -218,3 +218,12 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Creating the enrollment before accept: the dashboard would list courses the learner never committed to.
 **Consequences:** No migration, and personal and org courses follow one path: generate → (edit) → accept → copy into the enrollment. Edits before accept (PC1.4) change `template_plan`; after accept, they're plan versions.
 **One-liner:** The course owns the starting map; each learner's enrollment owns their copy of it.
+
+## ADR-0017: Cutting a prerequisite rewires its dependents
+**Context:** The spec lets a learner cut concepts before accepting, with a warning naming what depends on the cut concept (§4.4). It doesn't say what happens to those dependents. A dangling prereq would break the graph rules (ADR-0013 validators).
+**Decision:** Each dependent inherits the removed concept's own prereqs (A ← B ← C, cut B ⇒ A ← C), deduplicated and in order (`plan.remove_concept`). The warning names the direct dependents and says the course won't teach the cut concept. Edits are allowed only before accept; afterwards, changes are plan versions.
+**Alternatives:**
+- Drop the edge only: C could then come before A, losing ordering the map relied on.
+- Cascade-remove the dependents: one cut could wipe out much of the map.
+**Consequences:** The edited map is always a valid DAG, and the old order minus the cut concept is still a valid order, so the instructor's sequence survives edits. The learner can skip a topic, but not the ordering that made the rest teachable.
+**One-liner:** Cut what you like; what came after it still comes after what came before it.

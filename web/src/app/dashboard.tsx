@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -62,7 +63,11 @@ export function Dashboard() {
           data.courses.map((c) => (
             <Card key={c.enrollment_id}>
               <CardHeader>
-                <CardTitle>{c.title}</CardTitle>
+                <CardTitle>
+                  <Link href={`/courses/${c.course_id}`} className="hover:underline">
+                    {c.title}
+                  </Link>
+                </CardTitle>
                 <CardDescription>
                   {c.scope === "org" ? `Org course · ${c.org_name}` : "Personal course"} ·{" "}
                   {c.concepts_complete}/{c.concepts_total} concepts · {c.due_count} due for review

@@ -7,15 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from agent.llm import LLMError, LLMRefusal
 from app.auth import CurrentUserDep
-from app.deps import Db, LlmDep
+from app.deps import Db, LlmDep, RedisDep
 from app.models import Course
 from app.services.courses import (
     AnswersIn,
     CourseDetail,
     CourseIntake,
+    accept_map,
     course_detail,
     create_course,
     get_owned_course,
+    remove_concept,
     run_assess,
     run_map,
     run_probe,
@@ -82,4 +84,22 @@ async def map_concepts(
         raise HTTPException(422, "The instructor can't plan this course.") from err
     except LLMError as err:
         raise HTTPException(502, "The instructor couldn't build your map. Try again.") from err
+    return await course_detail(db, user, course)
+
+
+@router.delete("/{course_id}/map/concepts/{concept_id}")
+async def remove_map_concept(
+    concept_id: str, course: OwnedCourseDep, user: CurrentUserDep, db: Db
+) -> CourseDetail:
+    """Cut a concept before accepting; its dependents inherit its prereqs (ADR-0017)."""
+    await remove_concept(db, course, concept_id)
+    return await course_detail(db, user, course)
+
+
+@router.post("/{course_id}/accept")
+async def accept(
+    course: OwnedCourseDep, user: CurrentUserDep, db: Db, redis: RedisDep
+) -> CourseDetail:
+    """Accept the map: creates the enrollment, plan v1 and progress rows (idempotent)."""
+    await accept_map(db, redis, user, course)
     return await course_detail(db, user, course)

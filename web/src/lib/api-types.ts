@@ -220,6 +220,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courses/{course_id}/map/concepts/{concept_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Map Concept
+         * @description Cut a concept before accepting; its dependents inherit its prereqs (ADR-0017).
+         */
+        delete: operations["remove_map_concept_api_courses__course_id__map_concepts__concept_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept
+         * @description Accept the map: creates the enrollment, plan v1 and progress rows (idempotent).
+         */
+        post: operations["accept_api_courses__course_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -374,6 +414,8 @@ export interface components {
             };
             assessment?: components["schemas"]["AssessOutput"] | null;
             concept_map?: components["schemas"]["ConceptMap"] | null;
+            /** Enrollment Id */
+            enrollment_id?: string | null;
         };
         /**
          * CourseIntake
@@ -899,6 +941,73 @@ export interface operations {
         };
     };
     map_concepts_api_courses__course_id__map_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_map_concept_api_courses__course_id__map_concepts__concept_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                concept_id: string;
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_api_courses__course_id__accept_post: {
         parameters: {
             query?: never;
             header?: never;

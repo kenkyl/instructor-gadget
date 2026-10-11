@@ -1,28 +1,54 @@
 # Build log
 
-> **Current status:** CP1 in progress on `cp1/create-course` (draft PR #2). PC1.1–1.3 ✅ (wrapper + probe, assess, concept map + `plan.py`). Next: **PC1.4** (map editor: remove a concept with a dependents warning; accept → enrollment + plan v1 + `concept_progress`; invalidate the dashboard). Closes CP1.
+> **Current status:** CP1 ✅ merged to `main` (PR #2). Next: **CP2 / PC2.1** (`agent/pedagogy.py`: scoring, mastery, bands, unlock gate, FSRS; ★ Kyle: `update_mastery`, `band`, `mcq_score`/`combine`) on branch `cp2/learn-check-adapt`.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
 ---
 
-## CP1 notes (in progress; folded into the CP1 entry when CP1 closes)
+## CP1: Create a course (Sun 2026-10-11, PR #2)
+
+**What we built**
+- **PC1.1, LLM client wrapper + probe + intake:** `agent/llm.py` is the only way to call the model: structured output via `output_config.format`, Pydantic validation, one retry with the errors (`_shared/retry.md`), server-side refusal fallback, and one `llm_calls` row per API request, written in its own transaction through a `CallSink`. `diagnose.probe` end to end (idempotent), plus the intake form with recommended defaults.
+- **PC1.2, assess:** answers on one screen → assessed level, evidence per question, gaps, and a plain adjustment message. The input is passed as validation context (ADR-0015), the assessment is final (ADR-0014), and answers are treated as evidence, never instructions.
+- **PC1.3, concept map:** the `map-concepts` skill, and `agent/plan.py` pure graph rules (unknown prereqs and cycle detection by Kyle; order; ±15% time in integer math) running as `ConceptMap` validators, so a bad map earns one re-ask. The map is stored as the course's base map (ADR-0016).
+- **PC1.4, edit + accept:** cutting a concept rewires its dependents (ADR-0017). Accept creates the enrollment, plan v1 and `concept_progress` in one transaction (`pedagogy.initially_unlocked`), then invalidates the dashboard. Dashboard cards link to the course.
+- **Numbers (live, end to end):** intake → accepted map = **24.5 s of LLM time** (probe 5.8, assess 6.5, map 12.2; target < 90 s) and **$0.045 per course**. The over-claimer was re-levelled with a specific reason. 70 deterministic tests.
+
+**Key prompts**
+- "Resume the Instructor build… Load the claude-api skill before writing any LLM code." Loading it is what exposed the forced-tool-use 400 before any code depended on it.
+- "On verify step 1: should we fix this?" (9 high npm advisories). The AI traced all 9 to one unpatched `braces` advisory in dev-only tooling, where npm's "fix" is a breaking downgrade. Kyle chose no change.
+- "I see two entries, but I refreshed twice." This exposed AI test data left in the dev DB. Live checks now use an in-memory sink or the throwaway test DB.
+- The cut-a-prerequisite question (rewire / drop edge / cascade): Kyle chose rewire (ADR-0017).
+- "I added an arch diagram via visualizer in another session and want to keep it in this PR." Kept as a generated artifact, not hand-edited.
+
+**Decisions:** ADR-0013 (structured outputs, own validation), ADR-0014 (the assessment is final), ADR-0015 (input as validation context), ADR-0016 (`template_plan` is every course's base map), ADR-0017 (rewire on cut).
+
+**Where the AI went wrong or was corrected**
 - **AI mistake (PC0.6 verify step):** the AI told Kyle to edit a prompt file and re-curl `/api/skills`. The hash didn't change, because the registry is cached at startup and `fastapi dev` only reloads on `.py` changes. Fix: `make api` now runs uvicorn with `--reload-include '*.md' --reload-include '*.yaml'`, so prompt edits hot-reload in dev.
 - **AI mistake (while testing that fix):** the AI started a test server on port 8001 without checking whether the port was free. It was in use by an unrelated local process, and the AI's cleanup (`kill` on whatever listened on 8001) stopped that process. Rule: check that a port is free before using it, and only kill PIDs the AI itself started.
 - **PC1.1, plan vs. current API:** the plan said "structured output via forced tool use". Loading the `claude-api` skill before coding showed that current models (Sonnet 5.5, our default) reject forced `tool_choice` with a 400, and that `messages.parse()` raises on invalid output, losing the text and usage we log. The wrapper uses `output_config.format` and validates with Pydantic itself (ADR-0013). Checking the docs first avoided building on a dead API.
 - **AI near-miss (PC1.1):** the registry loads `schema.py` by file path, so a normal `import agent.skills.diagnose.schema` would have created a second `ProbeOutput` class, and the wrapper's `isinstance`/contract checks would have failed at runtime. Caught while writing the service; the registry now shares one module via `sys.modules` (checked in both import orders).
 - **AI mistake caught by a test (PC1.1):** `POST /courses/{id}/probe` returned 503 ("LLM not configured") to a user who doesn't own the course, because FastAPI resolves dependencies before the handler body. Ownership is now a dependency declared before `LlmDep`, so 401 → 404 → 503 is the order.
 - **Process hygiene (PC1.1):** the AI verified that port 8765 was free before starting a test API. `pgrep` matched both the `uv` wrapper and its Python child, so the first `kill` failed harmlessly. The AI checked both command lines before stopping them. Nothing else was touched.
-- **Live verification (PC1.1):** one probe through the wrapper, plus one through the API: both valid on the first attempt, ~6 s, ~$0.008–0.010 each, served by `claude-sonnet-5-5`.
 - **AI mistake (PC1.1 verify step):** the Verify step said "your call shows `ok`", but Kyle saw two rows. The second was the AI's own end-to-end test course, left in the dev DB without saying so. Rule: any live test data the AI creates is called out in Verify, or goes in-memory or under a throwaway user (PC1.2's live runs used an in-memory sink).
 - **PC1.2, the prompt failed live runs that fakes would have passed:** the three `assess` eval cases (over-claimer, prompt injection, under-claimer) passed their asserts on the first live run, but reading the outputs showed three problems. The model promised a reassessment the product doesn't offer (→ ADR-0014). It listed untested topics as "gaps". And it said "start at intermediate" for a learner assessed *strong* (it mixed up the starting level with the target level). Each fix was one prompt line, re-run live. Lesson: asserts check the fields; a human still has to read the words.
-- **PC1.2 run-to-run variance:** the same under-claimer answers came out strong, strong, then intermediate across three runs. Each passed, but this is why the CP5 diagnosis eval repeats each persona.
 - **AI mistake caught by its own test (PC1.3):** `time_error` used floats, and `180 * 1.15 == 206.99999999999997`, so a map at exactly +15% would have been rejected and sent for a pointless re-ask. Now integer math.
 - **AI near-miss (PC1.3):** the AI wrote a developer note about cache policy into `SKILL.md`'s body, which is sent to the model as instructions. Moved to a YAML comment; the `new-instructor-skill` skill now warns about it.
-- **PC1.3 ★ tests checked before hand-off:** the AI ran Kyle's tests against a throwaway reference implementation, loaded only for that run, to prove they're consistent and passable, without putting an answer in the repo.
-- **PC1.3 ★ (Kyle):** implemented `find_unknown_prereqs` and an iterative three-state DFS `find_cycle` (on-path / done), and **added a test the AI's suite missed**: a concept leading *into* a loop must be trimmed from the reported cycle, or the re-ask would blame the wrong concept.
-- **PC1.3 live maps:** valid on the first attempt (11.9 s / $0.021 for a 3 h foundation map; 7.6 s / $0.016 for cram). J1 total LLM time ≈ 24 s, against the 90 s target. Quality note: both maps chain early concepts linearly (e.g. "golden signals" needs "severity triage"), which the prompt warns against. Candidate for a CP5 judge ("is each prereq a real dependency?").
+
+- **AI near-miss (PC1.4):** a new test asserted kyle's dashboard was empty before accept, which only held because of test order. Caught on review and rewritten to filter by the course under test.
+
+**Tradeoffs accepted**
+- `diagnose` and `map-concepts` are never cached: about 4.5¢ and 25 s per new course, in exchange for never serving one learner's diagnosis to another. Revisit `map-concepts` for org templates (CP4).
+- Generated maps chain early concepts more linearly than they need to. Noted as a CP5 judge ("is each prereq a real dependency?"), not fixed by prompt guesswork now.
+- Probe idempotency is check-then-insert (a true double-POST race could make two calls); the UI fires it once.
+- Draft courses aren't listed on the dashboard until accepted.
+- npm audit: one unpatched advisory in dev tooling, left as is (Kyle's call).
+
+**Kyle's ★:** `find_unknown_prereqs` + `find_cycle` (iterative three-state DFS), plus an extra test the AI missed: a path *into* a loop must be trimmed from the reported cycle.
+
+**How to verify:** `make up && make migrate && make seed && make test` (70 pass). Then `make dev` → log in as kyle → New course → answer the probe badly → see the re-level message → Build my concept map → remove a concept that others need (warning, then rewire) → Accept → the course appears on the dashboard.
 
 ## CP0: Foundations (Sat 2026-10-10 → Sun 2026-10-11, PR #1)
 

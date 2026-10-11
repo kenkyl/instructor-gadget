@@ -373,7 +373,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | Operation | When | How |
 |---|---|---|
 | Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner |
-| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, `POST /api/courses/{id}/map`, once only), and accept (🔜 PC1.4) | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`), edited before accept (🔜 PC1.4) |
+| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, once only), and accept (✔︎ PC1.4: → `active`) | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`) and edited before accept (✔︎ PC1.4, `DELETE /api/courses/{id}/map/concepts/{concept_id}`: dependents are rewired, ADR-0017); read-only once `active` |
 | Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; list by owner or org |
 
 ```json
@@ -406,7 +406,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Personal course accepted (🔜 PC1.4); admin assigns an org course (🔜 PC4.3) | Insert, then insert plan v1 |
+| Write | Personal course accepted (✔︎ PC1.4, `POST /api/courses/{id}/accept`); admin assigns an org course (🔜 PC4.3) | Insert (`source=owner`, `current_plan_version=1`), then plan v1 and `concept_progress`, in **one transaction**; then `invalidate_dashboard` |
 | Update | Every plan change (`current_plan_version`); course completion (`status`, `completed_at`) | Same transaction as the `plan_versions` insert |
 | Read | Dashboard (active and complete, badges), every learning-loop request | By id; list by user |
 
@@ -460,13 +460,13 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | `plan` | jsonb | no | The full `ConceptMap` at this version (§5.2) |
 | `diff` | jsonb | yes | `PlanDiff` against the previous version (§5.2); null for v1 |
 | `trigger` | varchar(32) | no | `diagnosis` \| `assignment` \| `quiz_result` \| `prereq_override` \| `user_request` (P2 chat) |
-| `reason` | text | no | Written by `remediate.explain_change`; names the score and the misconception |
+| `reason` | text | no | v1: the map's `sequence_rationale`. Later versions: written by `remediate.explain_change`, naming the score and the misconception |
 | `rule` | varchar(64) | yes | Which `pedagogy.adapt` rule fired, e.g. `insert_remediation` |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Accept (v1, `diagnosis`); org assignment (v1, `assignment`); quiz-driven adaptation; prerequisite override; P2 chat (`user_request`) | Insert-only, in the same transaction as the `enrollments.current_plan_version` update |
+| Write | Accept (✔︎ PC1.4: v1, `diagnosis`, the accepted map); org assignment (v1, `assignment`); quiz-driven adaptation; prerequisite override; P2 chat (`user_request`) | Insert-only, in the same transaction as the `enrollments.current_plan_version` update |
 | Update | Never | Versions are immutable |
 | Read | Learning loop (current version); plan history and diff UI (🔜 PC2.5) | Latest version, or a specific one |
 
@@ -498,7 +498,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 
 | Operation | When | How |
 |---|---|---|
-| Write | Plan accepted or assigned: one row per concept (`locked`, or `unlocked` if it has no prereqs) | Bulk insert |
+| Write | Plan accepted (✔︎ PC1.4) or assigned (🔜 PC4.3): one row per concept (`locked`, or `unlocked` if it has no prereqs: `pedagogy.initially_unlocked`) | Bulk insert, same transaction as the enrollment |
 | Update | Quiz graded (🔜 PC2.4–2.5): `mastery`, `band`, `last_score`, `attempts`, `fsrs_card`, `due`; dependents unlock when every prereq is solid or better | Values computed by the pure functions in `pedagogy.py`; the service writes them |
 | Read | Unlock gate before opening a concept; dashboard mastery bands and due count; quiz distractor targeting | By enrollment; `due <= now()` for the review count |
 

@@ -76,7 +76,7 @@ The assessment is **final**: there's no retake. A starting level that turns out 
   - citations, for grounded courses
 - Shown as a dependency-ordered list **with the reasoning for the sequence.**
 - Validated in code: no unknown prereqs, no cycles, total time within ±15% of target.
-- The learner may cut concepts (P1) or reorder them (P1+). Cutting a prerequisite triggers a warning naming what depends on it.
+- The learner may cut concepts (P1) or reorder them (P1+). Cutting a prerequisite triggers a warning naming what depends on it. After confirming, each dependent inherits the cut concept's own prerequisites, so ordering still holds (ADR-0017).
 
 ### 4.5 Teach (per concept)
 1. **Explanation:** brief. Lead with the counterintuitive part, and use the learner's analogy domain.
