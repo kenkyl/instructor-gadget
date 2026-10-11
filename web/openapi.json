@@ -257,6 +257,184 @@
           }
         }
       }
+    },
+    "/api/courses": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Create",
+        "operationId": "create_api_courses_post",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseIntake"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Get",
+        "operationId": "get_api_courses__course_id__get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/probe": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Probe",
+        "description": "Generate the diagnostic questions (idempotent: a second call returns the same ones).",
+        "operationId": "probe_api_courses__course_id__probe_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -293,6 +471,124 @@
           "prompt_version"
         ],
         "title": "CallInfo"
+      },
+      "CourseConfig": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 2,
+            "title": "Topic"
+          },
+          "target_hours": {
+            "type": "number",
+            "maximum": 40.0,
+            "minimum": 0.5,
+            "title": "Target Hours",
+            "default": 3
+          },
+          "target_level": {
+            "type": "string",
+            "enum": [
+              "beginner",
+              "intermediate",
+              "advanced",
+              "expert"
+            ],
+            "title": "Target Level",
+            "default": "intermediate"
+          },
+          "self_level": {
+            "type": "string",
+            "enum": [
+              "novice",
+              "intermediate",
+              "strong",
+              "expert"
+            ],
+            "title": "Self Level",
+            "default": "intermediate"
+          },
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Formats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic"
+        ],
+        "title": "CourseConfig",
+        "description": "Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration."
+      },
+      "CourseDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CourseStatus"
+          },
+          "config": {
+            "$ref": "#/components/schemas/CourseConfig"
+          },
+          "mission": {
+            "$ref": "#/components/schemas/Mission"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeQuestionView"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "config",
+          "mission"
+        ],
+        "title": "CourseDetail"
+      },
+      "CourseIntake": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/CourseConfig"
+          },
+          "mission": {
+            "$ref": "#/components/schemas/Mission"
+          }
+        },
+        "type": "object",
+        "required": [
+          "config",
+          "mission"
+        ],
+        "title": "CourseIntake",
+        "description": "The intake form (spec \u00a74.1). Defaults live in CourseConfig/Mission and the form."
+      },
+      "CourseStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "probed",
+          "assessed",
+          "mapped",
+          "active"
+        ],
+        "title": "CourseStatus"
       },
       "CurrentUser": {
         "properties": {
@@ -529,6 +825,76 @@
           "username"
         ],
         "title": "LoginRequest"
+      },
+      "Mission": {
+        "properties": {
+          "goal": {
+            "type": "string",
+            "title": "Goal"
+          },
+          "expert_means": {
+            "type": "string",
+            "title": "Expert Means"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "cram",
+              "foundation"
+            ],
+            "title": "Mode",
+            "default": "foundation"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "analogy_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analogy Domain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal",
+          "expert_means"
+        ],
+        "title": "Mission",
+        "description": "Stored in courses.mission (JSONB): what the learner is really after (spec \u00a74.1)."
+      },
+      "ProbeQuestionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "prompt"
+        ],
+        "title": "ProbeQuestionView",
+        "description": "What the learner sees. `targets_concept` stays server-side: naming the concept being\nchecked is a hint (spec \u00a74.2: no hints)."
       },
       "SeededUser": {
         "properties": {

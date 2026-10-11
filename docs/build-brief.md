@@ -125,7 +125,7 @@ This brief covers *what to build and when*. The spec covers *how the instructor 
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind + shadcn/ui. Clean and plain; no design time.
 - **Backend:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2.x (or SQLModel). `create_all` is fine for MVP; no migrations needed.
 - **Agent:** a Python package (`backend/agent/`) **in-process with the backend**, with a clean module boundary so it could become a separate service later. **Hand-rolled on the Anthropic Python SDK, no LangGraph.** The course lifecycle is an explicit state machine with LLM calls inside each stage, so a graph framework adds learning curve without buying anything here. Document this in `decisions.md`.
-  - Every LLM call returns **structured output** (tool use / JSON schema) validated by Pydantic. On validation failure, retry once with the error, then surface a friendly error.
+  - Every LLM call returns **structured output** (a JSON schema via `output_config.format`; ADR-0013) validated by Pydantic. On validation failure, retry once with the error, then surface a friendly error.
   - Model from env `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`). Prompts live in the product skill folders (§4.1) as versioned files, not inline strings.
 - **Postgres 16:** durable source of truth.
 - **Redis 8 Open Source** (official `redis:8` image; Redis 8 includes the Query Engine with vector search, so no Redis Stack is needed; verify with `FT._LIST` at CP0). Each use has a specific job:

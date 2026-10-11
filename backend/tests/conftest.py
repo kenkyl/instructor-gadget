@@ -30,6 +30,9 @@ TEST_REDIS_URL = get_settings().redis_url.rsplit("/", 1)[0] + "/15"
 # Point the app (and anything reading settings) at the test stores before it's imported.
 os.environ["DATABASE_URL"] = TEST_URL
 os.environ["REDIS_URL"] = TEST_REDIS_URL
+# Tests never call the real model: blank the key from .env (env vars beat the .env file).
+# Tests that need an LLM override get_llm with a fake client (tests/llm_fakes.py).
+os.environ["ANTHROPIC_API_KEY"] = ""
 get_settings.cache_clear()
 
 

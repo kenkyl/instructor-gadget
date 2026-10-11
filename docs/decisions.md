@@ -169,3 +169,21 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 **Consequences:** One more dev dependency (pyright). Static coverage for our own and typed libraries, runtime coverage for redis-py on any tested path.
 **One-liner:** Catch the classic async bug statically where the types allow, and at test time where they don't.
 
+
+## ADR-0013: Structured outputs (not forced tool use), validated by our own wrapper
+**Context:** The plan said "structured output via forced tool use". Current models (Sonnet 5.5, our default, and Opus 5.5) reject forced `tool_choice` (`any`/`tool`) with a 400. The SDK's `messages.parse()` raises on invalid output, which loses the raw text and token usage that the retry and `llm_calls` need.
+**Decision:**
+- `agent/llm.py` calls `beta.messages.create` with `output_config.format` = a JSON schema built from the call's Pydantic output model (`anthropic.transform_schema`), then validates the text itself with `model_validate_json`, including model validators such as "an adjusted level needs an explanation".
+- On a validation error it retries once: the model's reply goes back unchanged (thinking blocks included), followed by the errors rendered through `_shared/retry.md`. Refusals and `max_tokens` truncation are not retried.
+- Every API request is one `llm_calls` row (a retried call is two), written in its own transaction through a `CallSink` protocol, so `agent/` never imports `app/` and the log survives a failed request.
+- Server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) on models that support it; the log records the model that actually served the request.
+- Per-call `effort` and `max_tokens` live in the skill's `SKILL.md` frontmatter. Thinking tokens count toward `max_tokens`, so the default is 8000.
+**Alternatives:**
+- Forced tool use: a 400 on current models.
+- `messages.parse()`: less code, but there's nothing to log or feed back when validation fails.
+- `tool_choice: auto` + `strict: true`: the model may still answer in text, so it adds a failure mode for no gain.
+**Consequences:**
+- JSON-schema keywords the API can't enforce (`maxItems: 4`, `minimum`) are moved into descriptions by `transform_schema`. Pydantic enforces them, and the retry absorbs the rare miss.
+- The cost of a failed attempt is visible in the trace instead of hidden.
+- The fallback beta is Claude API only; on Bedrock or Vertex it would need the SDK's client-side middleware.
+**One-liner:** The API guarantees the JSON shape, Pydantic guarantees the meaning, and every attempt (good or bad) lands in the trace.

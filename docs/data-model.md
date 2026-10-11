@@ -11,6 +11,7 @@ Instructor stores every piece of data it uses in one of three places. This doc c
 **Status legend:**
 - ✅ = the schema exists (PC0.4)
 - 🔜 PCx.y = the pair checkpoint where the app starts writing or reading it
+- ✔︎ PCx.y = live since that pair checkpoint
 
 ---
 
@@ -371,8 +372,8 @@ The **shared definition** of a course: what it's about and how it's configured. 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Intake form submitted (🔜 PC1.1) | Insert with `status=draft` |
-| Update | After probe, assessment, map, and accept (🔜 PC1.1–1.4) | `status` advances; `template_plan` is set when an admin accepts (🔜 PC4.3) |
+| Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner |
+| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment, map, and accept (🔜 PC1.2–1.4) | `status` advances; `template_plan` is set when an admin accepts (🔜 PC4.3) |
 | Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; list by owner or org |
 
 ```json
@@ -431,7 +432,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 
 | Operation | When | How |
 |---|---|---|
-| Write | Probe generated (🔜 PC1.1) | Insert with `probe` |
+| Write | Probe generated (✔︎ PC1.1, `POST /api/courses/{id}/probe`) | Insert with `probe`. Idempotent: if one exists for `(course_id, user_id)` it's returned and no LLM call is made. The API never returns `targets_concept` to the learner (it would be a hint) |
 | Update | Answers submitted and assessed (🔜 PC1.2) | Set `answers`, `result`, `assessed_level`, `confidence` |
 | Read | Concept map generation (assessment shapes the map); course page shows the level adjustment | Latest by `(course_id, user_id)` |
 
@@ -676,7 +677,7 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | `id` | uuid | no | PK |
 | `course_id` / `enrollment_id` / `user_id` | uuid | yes | Context (FKs) |
 | `skill`, `call` | varchar(64) | no | e.g. `teach-concept` / `teach` |
-| `model` | varchar(64) | no | e.g. `claude-sonnet-5-5` |
+| `model` | varchar(64) | no | The model that **served** the request, e.g. `claude-sonnet-5-5`; differs from the configured model after a refusal fallback (ADR-0013) |
 | `prompt_version` | varchar(128) | no | `name@semver+sha8`; changes whenever the prompt files change |
 | `cache_result` | varchar(32) | no | `miss` \| `exact_hit` \| `semantic_hit` \| `bypass` |
 | `similarity` | float | yes | Semantic hits only |
@@ -686,13 +687,13 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | `est_cost_usd` | numeric(10,6) | no | 0 on a hit |
 | `saved_cost_usd`, `saved_latency_ms` | numeric / int | no | On a hit: the original generation's cost and latency, so savings are measured, not estimated |
 | `status` | varchar(32) | no | `ok` \| `error` |
-| `error` | text | yes | Validation or API error (after one retry) |
+| `error` | text | yes | Why this attempt failed: `invalid output:` + the Pydantic errors, `refusal (<category>)`, `hit max_tokens`, or the API error class |
 | `prompt_excerpt`, `response_excerpt` | text | yes | Truncated, for the trace page |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Every call through the LLM client wrapper (🔜 PC1.1), and every cache lookup result | Insert-only |
+| Write | Every API request through the LLM client wrapper (✔︎ PC1.1), and every cache lookup result (🔜 CP2/CP3) | Insert-only, **one row per API request**: a call that is retried after a validation error writes two rows. Written in its own transaction (`DbCallSink`), so the row survives a failed request. Never-cached skills log `cache_result=bypass` |
 | Read | Instructor trace page and cache impact tile (🔜 PC3.3): hit rate, calls avoided, $ and seconds saved | By course, by time window |
 
 | skill / call | cache_result | similarity | tokens in/out | latency | cost | saved |
@@ -711,7 +712,7 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 
 | Model | Field | Type | Default | Meaning |
 |---|---|---|---|---|
-| CourseConfig | `topic` | str | (required) | What to learn |
+| CourseConfig | `topic` | str (2–300 chars) | (required) | What to learn; also the course title |
 | | `target_hours` | float | 3 | The plan must fit within ±15% |
 | | `target_level` | beginner \| intermediate \| advanced \| expert | intermediate | Depth |
 | | `self_level` | novice \| intermediate \| strong \| expert | intermediate | Confirmed or overridden by the probe |

@@ -126,6 +126,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create */
+        post: operations["create_api_courses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get */
+        get: operations["get_api_courses__course_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe
+         * @description Generate the diagnostic questions (idempotent: a second call returns the same ones).
+         */
+        post: operations["probe_api_courses__course_id__probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -144,6 +198,61 @@ export interface components {
             /** Prompt Version */
             prompt_version: string;
         };
+        /**
+         * CourseConfig
+         * @description Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration.
+         */
+        CourseConfig: {
+            /** Topic */
+            topic: string;
+            /**
+             * Target Hours
+             * @default 3
+             */
+            target_hours: number;
+            /**
+             * Target Level
+             * @default intermediate
+             * @enum {string}
+             */
+            target_level: "beginner" | "intermediate" | "advanced" | "expert";
+            /**
+             * Self Level
+             * @default intermediate
+             * @enum {string}
+             */
+            self_level: "novice" | "intermediate" | "strong" | "expert";
+            /** Formats */
+            formats?: string[];
+        };
+        /** CourseDetail */
+        CourseDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            status: components["schemas"]["CourseStatus"];
+            config: components["schemas"]["CourseConfig"];
+            mission: components["schemas"]["Mission"];
+            /** Questions */
+            questions?: components["schemas"]["ProbeQuestionView"][];
+        };
+        /**
+         * CourseIntake
+         * @description The intake form (spec §4.1). Defaults live in CourseConfig/Mission and the form.
+         */
+        CourseIntake: {
+            config: components["schemas"]["CourseConfig"];
+            mission: components["schemas"]["Mission"];
+        };
+        /**
+         * CourseStatus
+         * @enum {string}
+         */
+        CourseStatus: "draft" | "probed" | "assessed" | "mapped" | "active";
         /** CurrentUser */
         CurrentUser: {
             /**
@@ -243,6 +352,37 @@ export interface components {
         LoginRequest: {
             /** Username */
             username: string;
+        };
+        /**
+         * Mission
+         * @description Stored in courses.mission (JSONB): what the learner is really after (spec §4.1).
+         */
+        Mission: {
+            /** Goal */
+            goal: string;
+            /** Expert Means */
+            expert_means: string;
+            /**
+             * Mode
+             * @default foundation
+             * @enum {string}
+             */
+            mode: "cram" | "foundation";
+            /** Deadline */
+            deadline?: string | null;
+            /** Analogy Domain */
+            analogy_domain?: string | null;
+        };
+        /**
+         * ProbeQuestionView
+         * @description What the learner sees. `targets_concept` stays server-side: naming the concept being
+         *     checked is a hint (spec §4.2: no hints).
+         */
+        ProbeQuestionView: {
+            /** Id */
+            id: string;
+            /** Prompt */
+            prompt: string;
         };
         /** SeededUser */
         SeededUser: {
@@ -466,6 +606,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkillInfo"][];
+                };
+            };
+        };
+    };
+    create_api_courses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseIntake"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_api_courses__course_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_api_courses__course_id__probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

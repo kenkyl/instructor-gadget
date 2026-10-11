@@ -19,7 +19,7 @@ IMPLEMENTED_FORMATS: frozenset[str] = frozenset({"reading", "quizzes", "hands_on
 class CourseConfig(BaseModel):
     """Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration."""
 
-    topic: str
+    topic: str = Field(min_length=2, max_length=300)
     target_hours: float = Field(default=3, ge=0.5, le=40)
     target_level: TargetLevel = "intermediate"
     self_level: Level = "intermediate"

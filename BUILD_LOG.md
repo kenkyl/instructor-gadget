@@ -1,7 +1,7 @@
 # Build log
 
-> **Current status:** CP0 ✅ merged to `main`. Next: **CP1 / PC1.1** (LLM client wrapper + `diagnose.probe` + intake form) on branch `cp1/create-course` (draft PR #2).
-> **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Before PC1.1, Kyle adds `ANTHROPIC_API_KEY` to `.env`, and the AI loads the `claude-api` skill.
+> **Current status:** CP1 in progress on `cp1/create-course` (draft PR #2). PC1.1 ✅ (LLM client wrapper + `diagnose.probe` end to end + intake form). Next: **PC1.2** (`diagnose.assess`: answers → assessed level, evidence, gaps, adjustment message).
+> **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
@@ -10,6 +10,11 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 ## CP1 notes (in progress; folded into the CP1 entry when CP1 closes)
 - **AI mistake (PC0.6 verify step):** the AI told Kyle to edit a prompt file and re-curl `/api/skills`. The hash didn't change, because the registry is cached at startup and `fastapi dev` only reloads on `.py` changes. Fix: `make api` now runs uvicorn with `--reload-include '*.md' --reload-include '*.yaml'`, so prompt edits hot-reload in dev.
 - **AI mistake (while testing that fix):** the AI started a test server on port 8001 without checking whether the port was free. It was in use by an unrelated local process, and the AI's cleanup (`kill` on whatever listened on 8001) stopped that process. Rule: check that a port is free before using it, and only kill PIDs the AI itself started.
+- **PC1.1, plan vs. current API:** the plan said "structured output via forced tool use". Loading the `claude-api` skill before coding showed that current models (Sonnet 5.5, our default) reject forced `tool_choice` with a 400, and that `messages.parse()` raises on invalid output, losing the text and usage we log. The wrapper uses `output_config.format` and validates with Pydantic itself (ADR-0013). Checking the docs first avoided building on a dead API.
+- **AI near-miss (PC1.1):** the registry loads `schema.py` by file path, so a normal `import agent.skills.diagnose.schema` would have created a second `ProbeOutput` class, and the wrapper's `isinstance`/contract checks would have failed at runtime. Caught while writing the service; the registry now shares one module via `sys.modules` (checked in both import orders).
+- **AI mistake caught by a test (PC1.1):** `POST /courses/{id}/probe` returned 503 ("LLM not configured") to a user who doesn't own the course, because FastAPI resolves dependencies before the handler body. Ownership is now a dependency declared before `LlmDep`, so 401 → 404 → 503 is the order.
+- **Process hygiene (PC1.1):** the AI verified that port 8765 was free before starting a test API. `pgrep` matched both the `uv` wrapper and its Python child, so the first `kill` failed harmlessly. The AI checked both command lines before stopping them. Nothing else was touched.
+- **Live verification (PC1.1):** one probe through the wrapper, plus one through the API: both valid on the first attempt, ~6 s, ~$0.008–0.010 each, served by `claude-sonnet-5-5`.
 
 ## CP0: Foundations (Sat 2026-10-10 → Sun 2026-10-11, PR #1)
 

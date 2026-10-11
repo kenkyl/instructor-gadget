@@ -17,6 +17,8 @@ class Settings(BaseSettings):
 
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-sonnet-5-5"
+    # Per request. The SDK retries 429/5xx twice on top of this.
+    anthropic_timeout_seconds: float = 90
 
     session_ttl_seconds: int = 8 * 60 * 60
     # Secure cookies need HTTPS; local dev is plain http, so this is off unless deployed.

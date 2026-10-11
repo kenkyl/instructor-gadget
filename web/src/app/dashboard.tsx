@@ -52,7 +52,7 @@ export function Dashboard() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium">Your courses</h2>
-          <Button disabled>New course</Button>
+          <Button onClick={() => router.push("/courses/new")}>New course</Button>
         </div>
         {data.courses.length === 0 ? (
           <Card>

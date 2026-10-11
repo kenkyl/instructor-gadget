@@ -8,12 +8,13 @@ A product skill is a folder `agent/skills/<name>/`:
     evals/            cases for this skill
 
 "Skills do language; code does decisions." The registry only assembles *what to say*; the
-LLM client wrapper (PC1.1) calls the model, and pedagogy.py makes every decision.
+LLM client wrapper (agent/llm.py) calls the model, and pedagogy.py makes every decision.
 """
 
 import hashlib
 import importlib.util
 import re
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -27,6 +28,7 @@ SKILLS_DIR = Path(__file__).parent / "skills"
 SHARED_DIR = SKILLS_DIR / "_shared"
 
 CachePolicy = Literal["exact", "semantic", "never"]
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
 # Learner-specific by definition: caching these would serve one learner's result to another
 # (ADR-0007). Enforced here so a frontmatter typo can't silently enable caching.
@@ -44,7 +46,9 @@ class CallSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     cache: CachePolicy
     stream: bool = False
-    max_tokens: int = Field(default=2000, gt=0)
+    # Thinking tokens count toward max_tokens, so leave headroom above the visible output.
+    max_tokens: int = Field(default=8000, gt=0)
+    effort: Effort | None = None  # None = the model's default effort
 
 
 class SkillMeta(BaseModel):
@@ -92,13 +96,20 @@ def _parse_skill_md(path: Path) -> tuple[SkillMeta, str]:
 
 
 def _load_schema(skill_dir: Path) -> ModuleType:
-    # Folder names are kebab-case (not importable), so load schema.py by path.
+    # Folder names are kebab-case (not always importable), so load schema.py by path. Share one
+    # module object with normal imports (`from agent.skills.diagnose.schema import ...`) via
+    # sys.modules: two copies would mean two ProbeOutput classes, and isinstance checks fail.
     module_name = f"agent.skills.{skill_dir.name.replace('-', '_')}.schema"
-    spec = importlib.util.spec_from_file_location(module_name, skill_dir / "schema.py")
+    path = (skill_dir / "schema.py").resolve()
+    existing = sys.modules.get(module_name)
+    if existing is not None and Path(existing.__file__ or "").resolve() == path:
+        return existing
+    spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise SkillError(f"{skill_dir}: cannot load schema.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    sys.modules.setdefault(module_name, module)  # a copied skill dir (tests) doesn't replace it
     return module
 
 
@@ -106,6 +117,8 @@ class Registry:
     def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
         self.skills_dir = skills_dir
         self.conduct = (skills_dir / "_shared" / "conduct.md").read_text().strip()
+        # Sent after an output fails validation; `{errors}` is replaced with the error list.
+        self.retry_template = (skills_dir / "_shared" / "retry.md").read_text().strip()
         self.skills: dict[str, Skill] = {}
         for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
             skill = self._load(skill_md.parent)
@@ -149,7 +162,7 @@ class Registry:
                 input_model=input_model,
                 output_model=output_model,
                 instructions=instructions,
-                prompt_hash=_sha(self.conduct, body, instructions),
+                prompt_hash=_sha(self.conduct, self.retry_template, body, instructions),
             )
         return Skill(meta=meta, instructions=body, calls=calls, path=skill_dir)
 

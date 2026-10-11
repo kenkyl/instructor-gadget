@@ -1,0 +1,130 @@
+"""J1 intake → probe through the API, with a fake model behind the real wrapper and DB sink."""
+
+import asyncio
+import uuid
+
+import pytest
+from fastapi import Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from agent.llm import LLMClient
+from agent.registry import get_registry
+from app.config import get_settings
+from app.deps import get_llm
+from app.main import app
+from app.models import LlmCall
+from app.services.llm_log import DbCallSink
+from tests.llm_fakes import FakeAnthropic, message
+from tests.test_llm import GOOD_PROBE, SHORT_PROBE
+
+INTAKE = {
+    "config": {"topic": "Redis caching patterns", "self_level": "intermediate"},
+    "mission": {"goal": "Ship a cache layer", "expert_means": "I can pick an eviction policy"},
+}
+
+
+@pytest.fixture
+def fake_llm():
+    """Swap in a fake model. Tests queue its replies with `fake_llm.reply(...)`."""
+    fake = FakeAnthropic()
+
+    def override(request: Request) -> LLMClient:
+        sink = DbCallSink(request.app.state.sessionmaker)
+        return LLMClient(fake.as_client(), get_registry(), sink, model="claude-sonnet-5-5")
+
+    app.dependency_overrides[get_llm] = override
+    yield fake
+    app.dependency_overrides.pop(get_llm, None)
+
+
+def _login(client, username: str) -> None:
+    assert client.post("/api/auth/login", json={"username": username}).status_code == 200
+
+
+def _llm_calls(course_id: str) -> list[LlmCall]:
+    async def fetch() -> list[LlmCall]:
+        engine = create_async_engine(get_settings().database_url)
+        try:
+            async with engine.connect() as conn:
+                rows = await conn.execute(
+                    select(LlmCall).where(LlmCall.course_id == uuid.UUID(course_id))
+                )
+                return list(rows.all())  # type: ignore[arg-type]
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(fetch())
+
+
+def test_create_requires_login(client) -> None:
+    assert client.post("/api/courses", json=INTAKE).status_code == 401
+
+
+def test_intake_is_validated(client) -> None:
+    _login(client, "kyle")
+    bad = {**INTAKE, "config": {**INTAKE["config"], "topic": ""}}
+    assert client.post("/api/courses", json=bad).status_code == 422
+
+
+def test_intake_then_probe(client, fake_llm: FakeAnthropic) -> None:
+    _login(client, "kyle")
+    created = client.post("/api/courses", json=INTAKE)
+    assert created.status_code == 201
+    course = created.json()
+    assert course["status"] == "draft"
+    assert course["questions"] == []
+    # Defaults fill the knobs the form didn't send (spec §4.1).
+    assert course["config"]["target_hours"] == 3
+    assert course["config"]["formats"] == ["reading", "quizzes", "hands_on"]
+
+    fake_llm.reply(message(GOOD_PROBE))
+    probed = client.post(f"/api/courses/{course['id']}/probe").json()
+    assert probed["status"] == "probed"
+    assert [q["id"] for q in probed["questions"]] == ["q1", "q2", "q3"]
+    # The learner never sees which concept a question checks: that would be a hint.
+    assert set(probed["questions"][0]) == {"id", "prompt"}
+
+    # Idempotent: a second POST (retry, double-click) makes no second LLM call.
+    again = client.post(f"/api/courses/{course['id']}/probe").json()
+    assert again["questions"] == probed["questions"]
+    assert len(fake_llm.requests) == 1
+    assert client.get(f"/api/courses/{course['id']}").json()["questions"] == probed["questions"]
+
+    [row] = _llm_calls(course["id"])
+    assert (row.skill, row.call, row.status, row.cache_result) == (
+        "diagnose",
+        "probe",
+        "ok",
+        "bypass",
+    )
+    assert row.user_id is not None
+    assert row.est_cost_usd > 0
+
+
+def test_probe_failure_is_retryable_and_logged(client, fake_llm: FakeAnthropic) -> None:
+    _login(client, "kyle")
+    course = client.post("/api/courses", json=INTAKE).json()
+
+    fake_llm.reply(message(SHORT_PROBE), message(SHORT_PROBE))
+    assert client.post(f"/api/courses/{course['id']}/probe").status_code == 502
+    assert client.get(f"/api/courses/{course['id']}").json()["status"] == "draft"
+    # Both attempts are in the log even though the request failed (own transaction).
+    assert [r.status for r in _llm_calls(course["id"])] == ["error", "error"]
+
+    fake_llm.reply(message(GOOD_PROBE))
+    assert client.post(f"/api/courses/{course['id']}/probe").json()["status"] == "probed"
+
+
+def test_other_users_cannot_see_a_course(client) -> None:
+    _login(client, "kyle")
+    course = client.post("/api/courses", json=INTAKE).json()
+    _login(client, "dana")
+    assert client.get(f"/api/courses/{course['id']}").status_code == 404
+    assert client.post(f"/api/courses/{course['id']}/probe").status_code == 404
+
+
+def test_probe_without_an_api_key_is_503(client) -> None:
+    _login(client, "kyle")
+    course = client.post("/api/courses", json=INTAKE).json()
+    assert client.post(f"/api/courses/{course['id']}/probe").status_code == 503
