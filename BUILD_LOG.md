@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP2 / PC2.1 ✅ (`agent/pedagogy.py`: scoring, mastery, bands, unlock gate, FSRS; ADR-0018). Next: **PC2.2** (`teach-concept` + SSE streaming + exact-match cache + Mermaid) on branch `cp2/learn-check-adapt` (draft PR #3).
+> **Current status:** CP2 / PC2.2 ✅ (`teach-concept` streamed over SSE, exact-match cache `llm:exact:*` + `idx:llm_exact`, Mermaid in a sandboxed iframe; ADR-0019, ADR-0020). Next: **PC2.3** (connection-pool simulator prototype in a sandboxed iframe) on branch `cp2/learn-check-adapt` (draft PR #3).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
@@ -10,6 +10,12 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 ## CP2 notes (in progress; folded into the CP2 entry when CP2 closes)
 
 - **PC2.1:** checking the installed `fsrs` 6.3.2 source (not memory) showed its defaults are flashcard-scale (1 min / 10 min steps). A Good first quiz would have been "due" 10 minutes later. Fix: a day-scale scheduler (ADR-0018). `Band` moved to `agent/types.py` so `agent/` never imports `app/`. CLAUDE.md, the checkpoint skill and the build plan now say Kyle merges PRs. Kyle skipped the ★ to save time, so the AI wrote `mcq_score`/`combine`/`update_mastery`/`band` against the pre-written tests. Pyright caught a dict literal inferred as `int` instead of `Score`, so the mapping became a typed `MCQ_TO_SCORE` table.
+- **PC2.2:** the build plan's "check SSE through the Next rewrite" step paid off. The stream was measured live through `:3000` with a gzip-accepting client: 332 events arrived in **one burst at 13 s**. Without gzip, Next streamed fine (first event 1.5 s). The cause was Next's compression, not the proxy; `Cache-Control: no-transform` fixed it (ADR-0020). Live numbers: a lesson miss took 12.3 s and cost $0.019, with first text at 1.3 s. An exact hit took 0 ms and logged $0.019 / 12.3 s saved. Other findings:
+  - **Redis 8 only indexes DB 0** (`Cannot create index on db != 0`), so tests can't build `idx:llm_exact` on DB 15 (ADR-0019).
+  - **A test-isolation trap:** importing `tests.conftest` from a test module ran it twice, so `DATABASE_URL` became `instructor_test_test`.
+  - **Running pytest during a live check** wiped the live test-DB state (pytest recreates the DB and flushes DB 15), so the live setup had to be redone.
+  - **A CP1 bug:** with `cacheComponents` on, Next 16 errors on `useParams()` outside `<Suspense>`. It was in CP1's course page too (the page still returned 200), and all three dynamic pages now wrap their client component in `<Suspense>`.
+  - **Dependencies:** Kyle approved `mermaid` and `react-markdown`. Partial JSON parsing uses `pydantic_core.from_json`, so the backend has no new dependency.
 
 ## CP1: Create a course (Sun 2026-10-11, PR #2)
 

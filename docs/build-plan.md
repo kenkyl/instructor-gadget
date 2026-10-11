@@ -44,7 +44,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | PC | Build | ★ Kyle |
 |---|---|---|
 | PC2.1 | `agent/pedagogy.py` + tests: MCQ score, the lower-of-two combine rule, recency-weighted mastery (ADR-0005), bands, the unlock gate, `fsrs` scheduling (1–4 → Again/Hard/Good/Easy) | `update_mastery`, `band`, `mcq_score`/`combine` |
-| PC2.2 | `teach-concept` with SSE streaming (partial JSON → `field_delta` events), the exact-match cache (`llm:exact:*` native JSON + `idx:llm_exact`), Mermaid rendering. **Check that SSE streams through the Next rewrite**; if it buffers, call FastAPI directly for this endpoint. | — |
+| PC2.2 | `teach-concept` with SSE streaming (partial JSON → `field_delta` events), the exact-match cache (`llm:exact:*` native JSON + `idx:llm_exact`), Mermaid rendering. **Check that SSE streams through the Next rewrite**; if it buffers, call FastAPI directly for this endpoint. ✅ Checked live: Next's gzip buffered it, so the route sends `Cache-Control: no-transform` instead (ADR-0020). | — |
 | PC2.3 | Connection-pool simulator prototype in a sandboxed iframe (`srcdoc`, `sandbox="allow-scripts"`) | Find and explain its "surprise" threshold |
 | PC2.4 | `design-assessment` (4 MCQ + 1 short transfer item; answer keys stay server-side), `grade`, submit, misconception logging | — |
 | PC2.5 | Adaptation rules, `remediate`, plan versions + the diff UI | The `adapt` branch table |
@@ -93,3 +93,5 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - ~~`assessments.answers` shape~~: resolved in PC1.2. Stored as `{question_id: answer}`; sent to the model as an ordered list.
 - After CP1, consider rerunning `/visualizer:architecture` so `docs/architecture/` gains the assess and map flows (it's generated; don't hand-edit it).
 - Data written back from Redis must be validated with Pydantic (`model_validate`), as in `auth.py` and `dashboard.py`.
+- A lesson stream the client abandons (navigates away) is cancelled and **not logged** in `llm_calls`: under anyio's level cancellation, the log write would need a shielded cancel scope. Add one if the trace page (PC3.3) needs abandoned calls.
+- SSE payload models (`FieldDeltaEvent`, `DoneEvent`) aren't in the OpenAPI schema, because the route yields `ServerSentEvent`. The web mirrors `FieldDeltaEvent` by hand in the lesson page.

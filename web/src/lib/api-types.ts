@@ -260,6 +260,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enrollments/{enrollment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Enrollment
+         * @description The learner's plan with per-concept status and band.
+         */
+        get: operations["get_enrollment_api_enrollments__enrollment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/lesson": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lesson
+         * @description The stored lesson, or 404 if it hasn't been generated yet (then POST to stream it).
+         */
+        get: operations["get_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_get"];
+        put?: never;
+        /**
+         * Open Lesson
+         * @description Stream the lesson as SSE: `field_delta`* (`restart`)? then `done` with the stored lesson,
+         *     or `error`. A lesson that already exists arrives as a single `done`.
+         */
+        post: operations["open_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -298,6 +343,17 @@ export interface components {
              */
             adjustment_message?: string | null;
         };
+        /**
+         * Band
+         * @description Mastery bands (spec §4.9). Stored in concept_progress.band; set by pedagogy.band().
+         * @enum {string}
+         */
+        Band: "shaky" | "learning" | "solid" | "mastered";
+        /**
+         * CacheResult
+         * @enum {string}
+         */
+        CacheResult: "miss" | "exact_hit" | "semantic_hit" | "bypass";
         /** CallInfo */
         CallInfo: {
             /** Name */
@@ -311,6 +367,13 @@ export interface components {
             stream: boolean;
             /** Prompt Version */
             prompt_version: string;
+        };
+        /** Citation */
+        Citation: {
+            /** Doc */
+            doc: string;
+            /** Section */
+            section: string;
         };
         /** Concept */
         Concept: {
@@ -367,6 +430,11 @@ export interface components {
              */
             sequence_rationale: string;
         };
+        /**
+         * ConceptStatus
+         * @enum {string}
+         */
+        ConceptStatus: "locked" | "unlocked" | "in_progress" | "complete";
         /**
          * CourseConfig
          * @description Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration.
@@ -493,6 +561,26 @@ export interface components {
              */
             served_from: "cache" | "db";
         };
+        /** EnrollmentDetail */
+        EnrollmentDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Title */
+            title: string;
+            /** Plan Version */
+            plan_version: number;
+            concept_map: components["schemas"]["ConceptMap"];
+            /** Progress */
+            progress: components["schemas"]["ProgressView"][];
+        };
         /** Evidence */
         Evidence: {
             /** Question Id */
@@ -540,6 +628,50 @@ export interface components {
             /** Postgres Version */
             postgres_version: string | null;
         };
+        /**
+         * LessonKind
+         * @enum {string}
+         */
+        LessonKind: "core" | "remediation";
+        /**
+         * LessonOutput
+         * @description Stored in lessons.content. Field order is the streaming order the learner sees.
+         */
+        LessonOutput: {
+            /**
+             * Explanation Md
+             * @description Counterintuitive part first
+             */
+            explanation_md: string;
+            /**
+             * Example Md
+             * @description One complete worked example
+             */
+            example_md: string;
+            /**
+             * Diagram Mermaid
+             * @description Mermaid source, no code fences
+             */
+            diagram_mermaid: string;
+            /**
+             * Citations
+             * @description Org docs only
+             */
+            citations?: components["schemas"]["Citation"][];
+            /**
+             * Not In Docs
+             * @description Org docs only
+             */
+            not_in_docs?: string[];
+        };
+        /** LessonView */
+        LessonView: {
+            /** Concept Id */
+            concept_id: string;
+            kind: components["schemas"]["LessonKind"];
+            content: components["schemas"]["LessonOutput"];
+            cache_result: components["schemas"]["CacheResult"];
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Username */
@@ -575,6 +707,17 @@ export interface components {
             id: string;
             /** Prompt */
             prompt: string;
+        };
+        /** ProgressView */
+        ProgressView: {
+            /** Concept Id */
+            concept_id: string;
+            status: components["schemas"]["ConceptStatus"];
+            /** Mastery */
+            mastery: number | null;
+            band: components["schemas"]["Band"] | null;
+            /** Due */
+            due: string | null;
         };
         /** SeededUser */
         SeededUser: {
@@ -1027,6 +1170,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enrollment_api_enrollments__enrollment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */

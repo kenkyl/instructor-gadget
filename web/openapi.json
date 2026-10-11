@@ -694,6 +694,217 @@
           }
         }
       }
+    },
+    "/api/enrollments/{enrollment_id}": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Enrollment",
+        "description": "The learner's plan with per-concept status and band.",
+        "operationId": "get_enrollment_api_enrollments__enrollment_id__get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/lesson": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Lesson",
+        "description": "The stored lesson, or 404 if it hasn't been generated yet (then POST to stream it).",
+        "operationId": "get_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Open Lesson",
+        "description": "Stream the lesson as SSE: `field_delta`* (`restart`)? then `done` with the stored lesson,\nor `error`. A lesson that already exists arrives as a single `done`.",
+        "operationId": "open_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -782,6 +993,27 @@
         ],
         "title": "AssessOutput"
       },
+      "Band": {
+        "type": "string",
+        "enum": [
+          "shaky",
+          "learning",
+          "solid",
+          "mastered"
+        ],
+        "title": "Band",
+        "description": "Mastery bands (spec \u00a74.9). Stored in concept_progress.band; set by pedagogy.band()."
+      },
+      "CacheResult": {
+        "type": "string",
+        "enum": [
+          "miss",
+          "exact_hit",
+          "semantic_hit",
+          "bypass"
+        ],
+        "title": "CacheResult"
+      },
       "CallInfo": {
         "properties": {
           "name": {
@@ -814,6 +1046,24 @@
           "prompt_version"
         ],
         "title": "CallInfo"
+      },
+      "Citation": {
+        "properties": {
+          "doc": {
+            "type": "string",
+            "title": "Doc"
+          },
+          "section": {
+            "type": "string",
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc",
+          "section"
+        ],
+        "title": "Citation"
       },
       "Concept": {
         "properties": {
@@ -920,6 +1170,16 @@
         ],
         "title": "ConceptMap",
         "description": "Stored in courses.template_plan and plan_versions.plan. These graph rules hold for\nevery stored map, including after the learner cuts concepts (PC1.4)."
+      },
+      "ConceptStatus": {
+        "type": "string",
+        "enum": [
+          "locked",
+          "unlocked",
+          "in_progress",
+          "complete"
+        ],
+        "title": "ConceptStatus"
       },
       "CourseConfig": {
         "properties": {
@@ -1220,6 +1480,48 @@
         ],
         "title": "DashboardResponse"
       },
+      "EnrollmentDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "plan_version": {
+            "type": "integer",
+            "title": "Plan Version"
+          },
+          "concept_map": {
+            "$ref": "#/components/schemas/ConceptMap"
+          },
+          "progress": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressView"
+            },
+            "type": "array",
+            "title": "Progress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "title",
+          "plan_version",
+          "concept_map",
+          "progress"
+        ],
+        "title": "EnrollmentDetail"
+      },
       "Evidence": {
         "properties": {
           "question_id": {
@@ -1331,6 +1633,85 @@
         ],
         "title": "HealthResponse"
       },
+      "LessonKind": {
+        "type": "string",
+        "enum": [
+          "core",
+          "remediation"
+        ],
+        "title": "LessonKind"
+      },
+      "LessonOutput": {
+        "properties": {
+          "explanation_md": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Explanation Md",
+            "description": "Counterintuitive part first"
+          },
+          "example_md": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Example Md",
+            "description": "One complete worked example"
+          },
+          "diagram_mermaid": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Diagram Mermaid",
+            "description": "Mermaid source, no code fences"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "type": "array",
+            "title": "Citations",
+            "description": "Org docs only"
+          },
+          "not_in_docs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not In Docs",
+            "description": "Org docs only"
+          }
+        },
+        "type": "object",
+        "required": [
+          "explanation_md",
+          "example_md",
+          "diagram_mermaid"
+        ],
+        "title": "LessonOutput",
+        "description": "Stored in lessons.content. Field order is the streaming order the learner sees."
+      },
+      "LessonView": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LessonKind"
+          },
+          "content": {
+            "$ref": "#/components/schemas/LessonOutput"
+          },
+          "cache_result": {
+            "$ref": "#/components/schemas/CacheResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "kind",
+          "content",
+          "cache_result"
+        ],
+        "title": "LessonView"
+      },
       "LoginRequest": {
         "properties": {
           "username": {
@@ -1413,6 +1794,59 @@
         ],
         "title": "ProbeQuestionView",
         "description": "What the learner sees. `targets_concept` stays server-side: naming the concept being\nchecked is a hint (spec \u00a74.2: no hints)."
+      },
+      "ProgressView": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConceptStatus"
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery"
+          },
+          "band": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Band"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "status",
+          "mastery",
+          "band",
+          "due"
+        ],
+        "title": "ProgressView"
       },
       "SeededUser": {
         "properties": {

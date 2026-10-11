@@ -594,12 +594,12 @@ Generated lesson content for one concept in one enrollment, stored **surface-neu
 | `content` | jsonb | no | `LessonOutput` (§5.4) |
 | `prototype_id` | uuid | yes | FK → prototypes |
 | `cache_result` | varchar(32) | no | `miss` \| `exact_hit` \| `semantic_hit` \| `bypass` |
-| `cache_key` | varchar(128) | yes | The exact-tier key, or the semantic entry id it came from |
+| `cache_key` | varchar(128) | yes | The exact-tier key (`llm:exact:…`, set on a miss too), or the semantic entry id it came from (CP3) |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Concept opened for the first time, after the stream completes (🔜 PC2.2) | Insert the validated `LessonOutput` |
+| Write | Concept opened for the first time, after the stream completes (✔︎ PC2.2, `POST /api/enrollments/{id}/concepts/{cid}/lesson`). Also moves `concept_progress.status` unlocked → in_progress and invalidates the dashboard | Insert the validated `LessonOutput`; if two tabs raced, the first stored lesson wins. A stream the client abandons is not stored (or cached) |
 | Read | Reopening a concept (no regeneration); `design-assessment` input; walkthrough and history | Latest by `(enrollment_id, concept_id)` |
 
 ```json
@@ -763,6 +763,8 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | | `diagram_mermaid` | str | Structure or flow |
 | | `citations` | list[{doc, section}] | Required for claims drawn from org docs |
 | | `not_in_docs` | list[str] | Topics flagged "This isn't covered in your docs" |
+| | (validator) | | `diagram_mermaid` must be bare Mermaid (no ``` fences) starting with flowchart, graph, sequenceDiagram, stateDiagram-v2 or classDiagram, with no `click` directives; a violation earns the one re-ask |
+| TeachInput | `topic`, `target_level`, `analogy_domain`, `formats` (sorted), `concept`, `prereq_titles` | | The `teach-concept` input: **no learner ids, assessment or misconceptions**, so it's shareable and its exact-cache key matches across learners in the same bucket (ADR-0007) |
 | QuizOutput | `questions` | list[Question] (exactly 4 multiple choice) | Transfer situations, one idea per question |
 | | `explain_item` | Question (short answer) | Required; graded on the 1–4 rubric |
 | Question | `id`, `type` (mcq \| short), `prompt` | | |
@@ -791,7 +793,7 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 |---|---|---|---|---|---|---|
 | `sess:{token}` | **hash** | 8 h (`SESSION_TTL_SECONDS`) | Login (`HSET` + `EXPIRE`) | `get_current_user` on every request (`HGETALL`) | Logout (`DEL`) or expiry | ✅ PC0.5 |
 | `dash:{user_id}` | **JSON** (native) | 10 min (`DASHBOARD_TTL_SECONDS`) | Warmed at login; refilled on a cache miss (cache-aside), `JSON.SET` | `GET /api/dashboard` (`JSON.GET`) | `DEL` on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | ✅ PC0.5 |
-| `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | 🔜 PC2.2 |
+| `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET` + `EXPIRE` in one `MULTI`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | ✅ PC2.2 (`agent/cache.py`) |
 | `llmcache_semantic` (RedisVL `SemanticCache` index) | hash + vector index | 7 days per entry | After a successful `teach-concept` generation | `teach-concept` on an exact miss (tier 2, nearest neighbour within a distance threshold, **filtered by bucket tags**) | Prompt-version tag mismatch; TTL | 🔜 PC3.1 |
 
 **Why these types (ADR-0011):**
@@ -833,7 +835,8 @@ Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, re
     "created_at": 1791709200, "hits": 3, "output": { "…": "validated output" } }
   ```
   The original `cost_usd` and `latency_ms` produce `llm_calls.saved_*` on a later hit. `hits` is incremented atomically (`JSON.NUMINCRBY`), with no read-modify-write.
-- **Index `idx:llm_exact`** (`FT.CREATE … ON JSON PREFIX 1 llm:exact:`):
+- **Redis errors never fail a call:** a failed lookup is a miss, and a failed write is skipped (logged). An entry that fails `ExactEntry` validation is a miss.
+- **Index `idx:llm_exact`** (`FT.CREATE … ON JSON PREFIX 1 llm:exact:`), created at startup by `ensure_index`, **on DB 0 only** (the Query Engine refuses other DBs; ADR-0019):
 
 | Field (JSONPath) | Type | Used for |
 |---|---|---|

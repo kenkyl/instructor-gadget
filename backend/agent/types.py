@@ -117,3 +117,47 @@ class MapOutput(ConceptMap):
         if err:
             raise ValueError(err)
         return self
+
+
+# --- lessons (spec §4.5) -----------------------------------------------------------------------
+# The diagram types a lesson may use: the ones that show structure or flow (§4.5), and that the
+# web renderer is tested with.
+MERMAID_TYPES = ("flowchart", "graph", "sequenceDiagram", "stateDiagram-v2", "classDiagram")
+
+
+class TeachInput(BaseModel):
+    """First-pass lesson input. Deliberately shareable: no learner ids, assessment or
+    misconceptions (ADR-0007), so two learners with the same bucket can share a cached lesson."""
+
+    topic: str
+    target_level: TargetLevel
+    analogy_domain: str | None
+    formats: list[Format]  # sorted by the service, so order doesn't change the cache key
+    concept: Concept
+    prereq_titles: list[str]  # what the learner has already been taught for this concept
+
+
+class Citation(BaseModel):
+    doc: str
+    section: str
+
+
+class LessonOutput(BaseModel):
+    """Stored in lessons.content. Field order is the streaming order the learner sees."""
+
+    explanation_md: str = Field(min_length=1, description="Counterintuitive part first")
+    example_md: str = Field(min_length=1, description="One complete worked example")
+    diagram_mermaid: str = Field(min_length=1, description="Mermaid source, no code fences")
+    citations: list[Citation] = Field(default_factory=list, description="Org docs only")
+    not_in_docs: list[str] = Field(default_factory=list, description="Org docs only")
+
+    @model_validator(mode="after")
+    def diagram_is_renderable(self) -> Self:
+        src = self.diagram_mermaid.strip()
+        if src.startswith("```"):
+            raise ValueError("diagram_mermaid must be bare Mermaid source, without ``` fences")
+        if not src.startswith(MERMAID_TYPES):
+            raise ValueError(f"diagram_mermaid must start with one of {list(MERMAID_TYPES)}")
+        if any(line.strip().startswith("click ") for line in src.splitlines()):
+            raise ValueError("diagram_mermaid must not use click directives")
+        return self

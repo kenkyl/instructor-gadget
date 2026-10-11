@@ -77,3 +77,27 @@ def client():
 
     with TestClient(app) as c:  # `with` runs the lifespan (opens and closes connections)
         yield c
+
+
+@pytest.fixture
+def fake_llm():
+    """Swap in a fake model behind the real wrapper and DB sink. Tests queue its replies with
+    `fake_llm.reply(...)`. No exact cache here: API tests see `miss`/`bypass` deterministically."""
+    from fastapi import Request
+
+    from agent.llm import LLMClient
+    from agent.registry import get_registry
+    from app.deps import get_llm
+    from app.main import app
+    from app.services.llm_log import DbCallSink
+    from tests.llm_fakes import FakeAnthropic
+
+    fake = FakeAnthropic()
+
+    def override(request: Request) -> LLMClient:
+        sink = DbCallSink(request.app.state.sessionmaker)
+        return LLMClient(fake.as_client(), get_registry(), sink, model="claude-sonnet-5-5")
+
+    app.dependency_overrides[get_llm] = override
+    yield fake
+    app.dependency_overrides.pop(get_llm, None)

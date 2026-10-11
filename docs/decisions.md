@@ -241,3 +241,24 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Fuzzing on: tests become nondeterministic, with no benefit at ≤ 20 concepts per course.
 **Consequences:** Reviews start at least a day out. Default FSRS parameters stay until the P2 optimizer, which needs review logs we don't store yet.
 **One-liner:** Spaced review is measured in days; same-day failure is remediation's job.
+
+## ADR-0019: Redis search indexes live on DB 0; tests that need one use a `test:` prefix there
+**Context:** The Redis 8 Query Engine refuses indexes on any other logical DB (`Cannot create index on db != 0`). The tests isolate Redis on DB 15 (ADR-0010). `idx:llm_exact` needs an index now, and the CP3 semantic cache needs a vector index.
+**Decision:**
+- Data keys stay where they are. The exact cache's `JSON.GET`/`JSON.SET` work on any DB.
+- `ensure_index` creates an index only on DB 0, and skips with a warning elsewhere. The cache still works there; only the inventory index is missing.
+- A test that needs a real index uses DB 0 with a unique `test:` index name and key prefix, and drops it (with its documents) afterwards.
+**Alternatives:**
+- Moving all tests to DB 0 under a namespace: every key would need a prefix, and flushing a whole DB would no longer be safe.
+- Faking the Query Engine: it would prove nothing about the real index.
+**Consequences:** API tests run without `idx:llm_exact`. CP3's RedisVL tests follow the same DB-0, `test:`-prefix pattern.
+**One-liner:** Keys can live anywhere; indexes only on DB 0, so index tests borrow DB 0 under a throwaway prefix.
+
+## ADR-0020: SSE through the Next proxy: `Cache-Control: no-transform`
+**Context:** The lesson streams as SSE from FastAPI through Next's `/api` rewrite. Measured live, a browser-like client (`Accept-Encoding: gzip`) received all 332 events in one burst at 13 s. Without gzip, the same request through Next streamed: the first event at 1.5 s, 286 distinct arrival times. The rewrite streams; Next's response compression buffers.
+**Decision:** The SSE route sends `Cache-Control: no-transform` (alongside FastAPI's `no-cache`), set in a dependency so it's there before the headers go out. Next's compression skips responses marked `no-transform`. A regression test asserts the header.
+**Alternatives:**
+- `compress: false` in `next.config`: turns compression off for every page.
+- Calling FastAPI directly for this endpoint (the build plan's fallback): cross-origin cookies and CORS for one route.
+**Consequences:** Lesson events arrive as they're written (first text ~1.3 s, the full lesson ~12 s), and every other response is still compressed. Any future streaming endpoint must send the same header.
+**One-liner:** The proxy wasn't the problem, gzip was; `no-transform` opts the stream out of it.
