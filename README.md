@@ -13,7 +13,17 @@ An AI instructor that diagnoses where you really are, maps the concepts and prer
 - [Roadmap](docs/roadmap.md): the full product vision
 
 ## Quickstart
-Coming at CP0. Docker (Postgres + Redis 8), `make api`, `make web`.
+Requires Docker, [uv](https://docs.astral.sh/uv/), and Node 24+.
+
+```bash
+cp .env.example .env      # add ANTHROPIC_API_KEY
+make install              # backend + web dependencies
+make up                   # Postgres 16 + Redis 8 in Docker
+make doctor               # health checks
+make dev                  # FastAPI on :8000, Next.js on :3000
+```
+
+Open http://localhost:3000. Run `make help` for all commands.
 
 ## License
 Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may view, run and modify it for noncommercial purposes. Commercial use is not permitted. This project does not accept outside contributions.

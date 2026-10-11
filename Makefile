@@ -1,9 +1,15 @@
 .DEFAULT_GOAL := help
-.PHONY: help up down nuke doctor logs psql redis-cli
+.PHONY: help install up down nuke doctor logs psql redis-cli api web dev test lint fmt types
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
+# --- setup -------------------------------------------------------------------
+install: ## Install backend (uv) and web (npm) dependencies
+	cd backend && uv sync
+	cd web && npm install
+
+# --- data stores (Docker) ----------------------------------------------------
 up: ## Start Postgres + Redis and wait until healthy
 	docker compose up -d --wait
 
@@ -24,3 +30,28 @@ psql: ## Open a Postgres shell
 
 redis-cli: ## Open a Redis shell
 	docker compose exec redis redis-cli
+
+# --- app processes (native, hot reload) --------------------------------------
+api: ## Run FastAPI on :8000 with reload
+	cd backend && uv run fastapi dev app/main.py --port 8000
+
+web: ## Run Next.js on :3000
+	cd web && npm run dev
+
+dev: ## Run api + web together (Ctrl-C stops both)
+	@trap 'kill 0' INT TERM EXIT; $(MAKE) api & $(MAKE) web & wait
+
+# --- quality -----------------------------------------------------------------
+test: ## Backend tests (needs `make up`)
+	cd backend && uv run pytest -q
+
+lint: ## ruff + eslint + tsc
+	cd backend && uv run ruff check . && uv run ruff format --check .
+	cd web && npm run lint && npm run typecheck
+
+fmt: ## Auto-format backend
+	cd backend && uv run ruff format . && uv run ruff check --fix .
+
+types: ## Regenerate web/src/lib/api-types.ts from FastAPI's OpenAPI schema
+	cd backend && uv run python -m app.export_openapi > ../web/openapi.json
+	cd web && npx openapi-typescript openapi.json -o src/lib/api-types.ts

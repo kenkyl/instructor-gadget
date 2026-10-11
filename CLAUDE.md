@@ -50,8 +50,15 @@ Filled in as they come to exist (PC0.2+).
 | `make doctor` | Health checks: Postgres, Redis PING, Redis >= 8, Query Engine (`FT._LIST`) |
 | `make down` / `make nuke` | Stop data stores / stop and delete their volumes |
 | `make psql` / `make redis-cli` | Shells into the data stores |
+| `make install` | Install backend (uv) + web (npm) dependencies |
+| `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
+| `make test` | Backend pytest (needs `make up`) |
+| `make lint` / `make fmt` | ruff + eslint + tsc / auto-format backend |
+| `make types` | Regenerate `web/src/lib/api-types.ts` from FastAPI's OpenAPI. Run after any API model change |
 
 ## Conventions
 - Python 3.12 with uv; ruff for lint and format; pytest; type hints everywhere; Pydantic v2 models at every boundary.
-- TypeScript strict; generated API types live in `web/lib/api-types.ts` (never hand-edit).
+- TypeScript strict; generated API types live in `web/src/lib/api-types.ts` (never hand-edit; CI fails if `web/openapi.json` is stale).
+- Next.js 16 has breaking changes vs. older versions: read `web/AGENTS.md` and the bundled docs in `web/node_modules/next/dist/docs/` before writing Next code.
+- Backend run commands use `uv run` from `backend/`; the browser only calls `/api/*` on Next, which proxies to FastAPI.
 - Prompts live in skill folders, never inline in Python.

@@ -1,7 +1,7 @@
 # Build log
 
-> **Current status:** CP0 in progress. PC0.1 (foundations) and PC0.2 (data stores) done.
-> **Next:** PC0.3: FastAPI + Next.js hello-world through the `/api` rewrite, generated OpenAPI types, CI.
+> **Current status:** CP0 in progress. PC0.1–PC0.3 done (foundations, data stores, FastAPI + Next.js wired with typed contract and CI).
+> **Next:** PC0.4: SQLAlchemy async models, first Alembic migration, seed orgs and users.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
