@@ -46,7 +46,10 @@ Kyle wants a deep working understanding of every component, so understanding mat
 Filled in as they come to exist (PC0.2+).
 | Command | What it does |
 |---|---|
-| `docker compose up -d` | Start Postgres + Redis |
+| `make up` | Start Postgres 16 + Redis 8 (Docker) and wait until healthy |
+| `make doctor` | Health checks: Postgres, Redis PING, Redis >= 8, Query Engine (`FT._LIST`) |
+| `make down` / `make nuke` | Stop data stores / stop and delete their volumes |
+| `make psql` / `make redis-cli` | Shells into the data stores |
 
 ## Conventions
 - Python 3.12 with uv; ruff for lint and format; pytest; type hints everywhere; Pydantic v2 models at every boundary.

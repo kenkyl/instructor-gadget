@@ -1,0 +1,37 @@
+# Local data stores only. The app processes (api, web) run natively with hot reload.
+# Ports bind to 127.0.0.1 so the databases are never exposed on the network.
+name: instructor
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-instructor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-instructor}
+      POSTGRES_DB: ${POSTGRES_DB:-instructor}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    # Redis 8 Open Source ships the Query Engine (vector search) built in: no Redis Stack needed.
+    image: redis:8.10
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
