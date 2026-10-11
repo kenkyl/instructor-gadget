@@ -13,6 +13,7 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 - **Next.js 16** ships `AGENTS.md`, which warns that its APIs differ from older versions. The AI read the bundled docs before writing the rewrite config.
 - **PC0.4:** Alembic's generated migration failed our own lint rules (old `typing` imports). Fixed the template so every future migration is generated clean. SQLAlchemy 2.1 deprecated `Result.tuples()`; the AI used it from older-version habit and the deprecation warning caught it.
 - **PC0.5:** read Next 16's bundled docs. `middleware` is now `proxy`, and the docs say proxy must only do optimistic cookie checks (no DB or Redis). shadcn init added an unfamiliar `cn` dependency; the AI verified it's shadcn's own package (repo shadcn-ui/cn, MIT) before accepting it.
+- **AI process slip (PC0.5):** the commit script ran `make lint`, which failed (a missing trailing newline), but the script didn't stop on the failure and committed anyway. CI caught it on the PR. Fix: checks must gate the commit (`make lint && make test && git commit`), never just print.
 - **Kyle's ★ (PC0.5):** implemented `invalidate_dashboard`. The first attempt forgot `await` on the async Redis client: the coroutine was never run, so `DEL` never happened and the test caught it. This is the classic async-Python bug; ruff doesn't detect it, a type checker (pyright) would.
 - **Kyle's ★ (PC0.3):** added `postgres_version` end to end: failing test → Pydantic model → endpoint → `make types` → UI. `tsc` caught the stale types before regeneration.
 

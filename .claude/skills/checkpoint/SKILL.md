@@ -5,7 +5,7 @@ description: Close out a pair checkpoint (PC) or checkpoint (CP) in this repo. R
 
 # checkpoint
 
-Run these steps in order. Stop and report if any step fails; never commit red.
+Run these steps in order. Stop and report if any step fails; never commit red. Chain the checks so a failure blocks the commit (`make lint && make test && git commit …`). Printing a failure isn't enough.
 
 ## 1. Checks
 Run whichever of these exist (check the `Makefile`):
