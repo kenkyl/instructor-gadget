@@ -15,3 +15,4 @@ def test_health_all_ok() -> None:
     assert body["redis"] == "ok"
     assert body["query_engine"] == "ok"
     assert body["redis_version"].startswith("8.")
+    assert body["postgres_version"].startswith("16")

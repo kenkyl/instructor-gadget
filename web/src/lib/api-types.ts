@@ -49,6 +49,8 @@ export interface components {
              * @enum {string}
              */
             query_engine: "ok" | "error";
+            /** Postgres Version */
+            postgres_version: string | null;
         };
     };
     responses: never;

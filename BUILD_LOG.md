@@ -7,6 +7,14 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 
 ---
 
+## CP0 notes (in progress; folded into the CP0 entry when CP0 closes)
+- **AI mistake:** CI referenced `astral-sh/setup-uv@v10`, but that action publishes no floating major tag. Pinned to `v10.3.0`.
+- **AI design flaw caught through pairing:** the health check used `except Exception: pass`. During Kyle's ★ task, a typo and a misplaced `.scalar()` were swallowed and reported as "Postgres: error" while Postgres was healthy. The checks now log the exception.
+- **Next.js 16** ships `AGENTS.md`, which warns that its APIs differ from older versions. The AI read the bundled docs before writing the rewrite config.
+- **Kyle's ★ (PC0.3):** added `postgres_version` end to end: failing test → Pydantic model → endpoint → `make types` → UI. `tsc` caught the stale types before regeneration.
+
+---
+
 ## Planning: Sat 2026-10-10
 
 **What we did**

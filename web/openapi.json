@@ -73,6 +73,17 @@
               "error"
             ],
             "title": "Query Engine"
+          },
+          "postgres_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postgres Version"
           }
         },
         "type": "object",
@@ -81,7 +92,8 @@
           "postgres",
           "redis",
           "redis_version",
-          "query_engine"
+          "query_engine",
+          "postgres_version"
         ],
         "title": "HealthResponse"
       }

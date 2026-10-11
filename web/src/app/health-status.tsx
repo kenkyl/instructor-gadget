@@ -20,7 +20,7 @@ export function HealthStatus() {
 
   const rows: [string, string][] = [
     ["Overall", health.status],
-    ["Postgres", health.postgres],
+    ["Postgres", `${health.postgres} (v${health.postgres_version ?? "?"})`],
     ["Redis", `${health.redis} (v${health.redis_version ?? "?"})`],
     ["Redis Query Engine", health.query_engine],
   ];
