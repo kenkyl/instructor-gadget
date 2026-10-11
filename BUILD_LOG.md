@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP1 ✅ merged to `main` (PR #2). Next: **CP2 / PC2.1** (`agent/pedagogy.py`: scoring, mastery, bands, unlock gate, FSRS; ★ Kyle: `update_mastery`, `band`, `mcq_score`/`combine`) on branch `cp2/learn-check-adapt`.
+> **Current status:** CP1 ✅ merged to `main` (PR #2). Next: **CP2 / PC2.1** (`agent/pedagogy.py`: scoring, mastery, bands, unlock gate, FSRS; ★ Kyle: `update_mastery`, `band`, `mcq_score`/`combine`) on branch `cp2/learn-check-adapt` (draft PR #3).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
