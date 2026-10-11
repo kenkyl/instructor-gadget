@@ -16,7 +16,7 @@ from app.main import app
 from app.models import LlmCall
 from app.services.llm_log import DbCallSink
 from tests.llm_fakes import FakeAnthropic, message
-from tests.test_llm import GOOD_PROBE, SHORT_PROBE
+from tests.test_llm import GOOD_PROBE, SHORT_PROBE, assessed
 
 INTAKE = {
     "config": {"topic": "Redis caching patterns", "self_level": "intermediate"},
@@ -128,3 +128,65 @@ def test_probe_without_an_api_key_is_503(client) -> None:
     _login(client, "kyle")
     course = client.post("/api/courses", json=INTAKE).json()
     assert client.post(f"/api/courses/{course['id']}/probe").status_code == 503
+
+
+OVERCLAIM = assessed(
+    assessed_level="novice",
+    confidence=0.8,
+    evidence=[
+        {"question_id": "q1", "observation": "Would restart before looking", "points_to": "novice"}
+    ],
+    gaps=["cache invalidation", "TTL choice"],
+    adjustment_message="You said intermediate, but your answer to q1 suggests we start earlier.",
+)
+ANSWERS = {"q1": "Restart it.", "q2": "  ", "q3": "No idea."}
+
+
+def _probed_course(client, fake_llm: FakeAnthropic) -> str:
+    _login(client, "kyle")
+    course_id = client.post("/api/courses", json=INTAKE).json()["id"]
+    fake_llm.reply(message(GOOD_PROBE))
+    client.post(f"/api/courses/{course_id}/probe")
+    return course_id
+
+
+def test_assess_relevels_with_an_explanation(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _probed_course(client, fake_llm)
+    fake_llm.reply(message(OVERCLAIM))
+
+    detail = client.post(f"/api/courses/{course_id}/assess", json={"answers": ANSWERS}).json()
+
+    assert detail["status"] == "assessed"
+    assert detail["assessment"]["assessed_level"] == "novice"
+    assert detail["assessment"]["adjustment_message"].startswith("You said intermediate")
+    # Stored trimmed, in question order; blank stays blank ("I don't know").
+    assert detail["answers"] == {"q1": "Restart it.", "q2": "", "q3": "No idea."}
+    sent = fake_llm.requests[-1]["messages"][0]["content"]
+    assert '"question_id": "q2"' in sent
+
+
+def test_assessment_is_locked_once_made(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _probed_course(client, fake_llm)
+    fake_llm.reply(message(OVERCLAIM))
+    client.post(f"/api/courses/{course_id}/assess", json={"answers": ANSWERS})
+
+    better = {k: "A much better answer." for k in ANSWERS}
+    again = client.post(f"/api/courses/{course_id}/assess", json={"answers": better}).json()
+
+    assert again["assessment"]["assessed_level"] == "novice"
+    assert again["answers"]["q1"] == "Restart it."
+    assert len(fake_llm.requests) == 2  # probe + one assess; no re-roll
+
+
+def test_assess_needs_one_answer_per_question(client, fake_llm: FakeAnthropic) -> None:
+    course_id = _probed_course(client, fake_llm)
+    resp = client.post(f"/api/courses/{course_id}/assess", json={"answers": {"q1": "x"}})
+    assert resp.status_code == 422
+    assert len(fake_llm.requests) == 1  # rejected before any model call
+
+
+def test_assess_before_probe_is_409(client, fake_llm: FakeAnthropic) -> None:
+    _login(client, "kyle")
+    course_id = client.post("/api/courses", json=INTAKE).json()["id"]
+    resp = client.post(f"/api/courses/{course_id}/assess", json={"answers": ANSWERS})
+    assert resp.status_code == 409

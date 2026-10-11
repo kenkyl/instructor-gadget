@@ -373,7 +373,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | Operation | When | How |
 |---|---|---|
 | Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner |
-| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment, map, and accept (🔜 PC1.2–1.4) | `status` advances; `template_plan` is set when an admin accepts (🔜 PC4.3) |
+| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map, and accept (🔜 PC1.3–1.4) | `status` advances; `template_plan` is set when an admin accepts (🔜 PC4.3) |
 | Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; list by owner or org |
 
 ```json
@@ -424,7 +424,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | `course_id` | uuid | no | FK → courses |
 | `user_id` | uuid | no | FK → users |
 | `probe` | jsonb | no | `ProbeOutput` (§5.3) |
-| `answers` | jsonb | yes | `{question_id: free-text answer}` |
+| `answers` | jsonb | yes | `{question_id: free-text answer}`, one key per probe question (trimmed; blank = "I don't know"). The model receives them as an ordered list (`AssessInput.answers`) |
 | `result` | jsonb | yes | `AssessOutput` (§5.3) |
 | `assessed_level` | varchar(32) | yes | Copied from the result for easy querying |
 | `confidence` | float | yes | 0–1 |
@@ -433,7 +433,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | Operation | When | How |
 |---|---|---|
 | Write | Probe generated (✔︎ PC1.1, `POST /api/courses/{id}/probe`) | Insert with `probe`. Idempotent: if one exists for `(course_id, user_id)` it's returned and no LLM call is made. The API never returns `targets_concept` to the learner (it would be a hint) |
-| Update | Answers submitted and assessed (🔜 PC1.2) | Set `answers`, `result`, `assessed_level`, `confidence` |
+| Update | Answers submitted and assessed (✔︎ PC1.2, `POST /api/courses/{id}/assess`) | Set `answers`, `result`, `assessed_level`, `confidence`; course `probed` → `assessed`. **Once only** (ADR-0014): a resubmit returns the stored result, and answers must cover exactly the probe's question ids (else 422) |
 | Read | Concept map generation (assessment shapes the map); course page shows the level adjustment | Latest by `(course_id, user_id)` |
 
 ```json

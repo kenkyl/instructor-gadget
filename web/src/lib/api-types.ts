@@ -180,10 +180,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courses/{course_id}/assess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assess
+         * @description Assess the probe answers (once; afterwards the result is returned unchanged).
+         */
+        post: operations["assess_api_courses__course_id__assess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswersIn
+         * @description {question_id: answer}. Blank is allowed and counts as "I don't know" (assess.md).
+         */
+        AnswersIn: {
+            /** Answers */
+            answers: {
+                [key: string]: string;
+            };
+        };
+        /** AssessOutput */
+        AssessOutput: {
+            /**
+             * Claimed Level
+             * @enum {string}
+             */
+            claimed_level: "novice" | "intermediate" | "strong" | "expert";
+            /**
+             * Assessed Level
+             * @enum {string}
+             */
+            assessed_level: "novice" | "intermediate" | "strong" | "expert";
+            /** Confidence */
+            confidence: number;
+            /** Evidence */
+            evidence: components["schemas"]["Evidence"][];
+            /** Gaps */
+            gaps: string[];
+            /**
+             * Adjustment Message
+             * @description Required when assessed_level != claimed_level; else null
+             */
+            adjustment_message?: string | null;
+        };
         /** CallInfo */
         CallInfo: {
             /** Name */
@@ -239,6 +293,11 @@ export interface components {
             mission: components["schemas"]["Mission"];
             /** Questions */
             questions?: components["schemas"]["ProbeQuestionView"][];
+            /** Answers */
+            answers?: {
+                [key: string]: string;
+            };
+            assessment?: components["schemas"]["AssessOutput"] | null;
         };
         /**
          * CourseIntake
@@ -315,6 +374,21 @@ export interface components {
              * @enum {string}
              */
             served_from: "cache" | "db";
+        };
+        /** Evidence */
+        Evidence: {
+            /** Question Id */
+            question_id: string;
+            /**
+             * Observation
+             * @description What the answer showed or failed to show
+             */
+            observation: string;
+            /**
+             * Points To
+             * @enum {string}
+             */
+            points_to: "novice" | "intermediate" | "strong" | "expert";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -690,6 +764,43 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assess_api_courses__course_id__assess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswersIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

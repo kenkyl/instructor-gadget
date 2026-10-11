@@ -1,10 +1,11 @@
-"""Course creation (J1): intake → diagnostic probe. Assess, map and accept follow in PC1.2–1.4.
+"""Course creation (J1): intake → diagnostic probe → assessment. Map and accept: PC1.3–1.4.
 
 Surface-neutral: the web router calls these, and a future MCP surface can too. Ownership is
 checked here, so every surface gets the same rule.
 """
 
 import uuid
+from typing import Annotated
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -12,7 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.llm import CallContext, LLMClient
-from agent.skills.diagnose.schema import ProbeInput, ProbeOutput
+from agent.skills.diagnose.schema import (
+    AssessInput,
+    AssessOutput,
+    ProbeAnswer,
+    ProbeInput,
+    ProbeOutput,
+)
 from agent.types import CourseConfig, Mission
 from app.auth import CurrentUser
 from app.models import Assessment, Course, CourseScope, CourseStatus
@@ -33,6 +40,12 @@ class ProbeQuestionView(BaseModel):
     prompt: str
 
 
+class AnswersIn(BaseModel):
+    """{question_id: answer}. Blank is allowed and counts as "I don't know" (assess.md)."""
+
+    answers: dict[str, Annotated[str, Field(max_length=4000)]]
+
+
 class CourseDetail(BaseModel):
     id: uuid.UUID
     title: str
@@ -40,6 +53,10 @@ class CourseDetail(BaseModel):
     config: CourseConfig
     mission: Mission
     questions: list[ProbeQuestionView] = Field(default_factory=list)
+    answers: dict[str, str] = Field(default_factory=dict)
+    # Shown to the learner in full: level, evidence, gaps and the adjustment message
+    # (transparency over smoothness, spec §4.3).
+    assessment: AssessOutput | None = None
 
 
 async def create_course(db: AsyncSession, user: CurrentUser, intake: CourseIntake) -> Course:
@@ -106,12 +123,56 @@ async def run_probe(
     return assessment
 
 
+async def run_assess(
+    db: AsyncSession, llm: LLMClient, user: CurrentUser, course: Course, answers: dict[str, str]
+) -> Assessment:
+    """Assess the answers once. After that the result is locked: resubmitting returns it
+    unchanged, so a learner can't re-roll answers until the level comes out higher."""
+    assessment = await latest_assessment(db, course.id, user.id)
+    if assessment is None:
+        raise HTTPException(409, "Write the diagnostic questions first.")
+    if assessment.result is not None:
+        return assessment
+
+    probe = ProbeOutput.model_validate(assessment.probe)
+    ids = [q.id for q in probe.questions]
+    if set(answers) != set(ids):
+        raise HTTPException(422, f"Send one answer per question: {ids}")
+    clean = {qid: answers[qid].strip() for qid in ids}  # question order, not request order
+
+    result = await llm.run(
+        "diagnose",
+        "assess",
+        AssessInput(
+            config=CourseConfig.model_validate(course.config),
+            mission=Mission.model_validate(course.mission),
+            probe=probe,
+            answers=[ProbeAnswer(question_id=qid, answer=clean[qid]) for qid in ids],
+        ),
+        AssessOutput,
+        ctx=CallContext(user_id=user.id, course_id=course.id),
+    )
+    assessment.answers = clean
+    assessment.result = result.model_dump(mode="json")
+    assessment.assessed_level = result.assessed_level
+    assessment.confidence = result.confidence
+    course.status = CourseStatus.assessed
+    await db.commit()
+    return assessment
+
+
 async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> CourseDetail:
     assessment = await latest_assessment(db, course.id, user.id)
     questions: list[ProbeQuestionView] = []
+    answers: dict[str, str] = {}
+    result: AssessOutput | None = None
     if assessment is not None:
-        probe = ProbeOutput.model_validate(assessment.probe)  # JSONB: validate, don't trust
+        # JSONB: validate on the way out, don't trust the stored shape.
+        probe = ProbeOutput.model_validate(assessment.probe)
         questions = [ProbeQuestionView(id=q.id, prompt=q.prompt) for q in probe.questions]
+        answers = assessment.answers or {}
+        if assessment.result is not None:
+            result = AssessOutput.model_validate(assessment.result)
     return CourseDetail(
         id=course.id,
         title=course.title,
@@ -119,4 +180,6 @@ async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> 
         config=CourseConfig.model_validate(course.config),
         mission=Mission.model_validate(course.mission),
         questions=questions,
+        answers=answers,
+        assessment=result,
     )

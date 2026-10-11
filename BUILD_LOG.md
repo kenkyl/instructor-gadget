@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP1 in progress on `cp1/create-course` (draft PR #2). PC1.1 ✅ (LLM client wrapper + `diagnose.probe` end to end + intake form). Next: **PC1.2** (`diagnose.assess`: answers → assessed level, evidence, gaps, adjustment message).
+> **Current status:** CP1 in progress on `cp1/create-course` (draft PR #2). PC1.1 ✅ (LLM wrapper + probe + intake), PC1.2 ✅ (`diagnose.assess` + assessment UI). Next: **PC1.3** (`map-concepts` skill + `plan.validate_map`; ★ Kyle writes the cycle and unknown-prereq checks).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
@@ -15,6 +15,9 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 - **AI mistake caught by a test (PC1.1):** `POST /courses/{id}/probe` returned 503 ("LLM not configured") to a user who doesn't own the course, because FastAPI resolves dependencies before the handler body. Ownership is now a dependency declared before `LlmDep`, so 401 → 404 → 503 is the order.
 - **Process hygiene (PC1.1):** the AI verified that port 8765 was free before starting a test API. `pgrep` matched both the `uv` wrapper and its Python child, so the first `kill` failed harmlessly. The AI checked both command lines before stopping them. Nothing else was touched.
 - **Live verification (PC1.1):** one probe through the wrapper, plus one through the API: both valid on the first attempt, ~6 s, ~$0.008–0.010 each, served by `claude-sonnet-5-5`.
+- **AI mistake (PC1.1 verify step):** the Verify step said "your call shows `ok`", but Kyle saw two rows. The second was the AI's own end-to-end test course, left in the dev DB without saying so. Rule: any live test data the AI creates is called out in Verify, or goes in-memory or under a throwaway user (PC1.2's live runs used an in-memory sink).
+- **PC1.2, the prompt failed live runs that fakes would have passed:** the three `assess` eval cases (over-claimer, prompt injection, under-claimer) passed their asserts on the first live run, but reading the outputs showed three problems. The model promised a reassessment the product doesn't offer (→ ADR-0014). It listed untested topics as "gaps". And it said "start at intermediate" for a learner assessed *strong* (it mixed up the starting level with the target level). Each fix was one prompt line, re-run live. Lesson: asserts check the fields; a human still has to read the words.
+- **PC1.2 run-to-run variance:** the same under-claimer answers came out strong, strong, then intermediate across three runs. Each passed, but this is why the CP5 diagnosis eval repeats each persona.
 
 ## CP0: Foundations (Sat 2026-10-10 → Sun 2026-10-11, PR #1)
 

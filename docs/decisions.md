@@ -187,3 +187,24 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - The cost of a failed attempt is visible in the trace instead of hidden.
 - The fallback beta is Claude API only; on Bedrock or Vertex it would need the SDK's client-side middleware.
 **One-liner:** The API guarantees the JSON shape, Pydantic guarantees the meaning, and every attempt (good or bad) lands in the trace.
+
+## ADR-0014: The diagnostic assessment is final; quizzes correct a wrong start
+**Context:** After seeing their assessed level, a learner could resubmit better-worded answers until the level came out higher. That would turn the diagnosis back into a self-report, the thing §4.2 says is unreliable.
+**Decision:**
+- One assessment per course and learner. Resubmitting returns the stored result unchanged.
+- A start that turns out too low is corrected by the learning loop, not by a retake: every concept ends in a quiz, and a strong result offers a test-out of the next concept (ADR-0006).
+- `assess.md` tells the model not to promise a reassessment, and to describe the quiz and test-out path instead. A live run showed it promising "I can reassess and move you up".
+**Alternatives:**
+- Allow one retake: gameable, and it doubles the uncached `assess` calls.
+- Silently drop the level and let quizzes sort it out: breaks "never re-level silently" (§4.3).
+**Consequences:** The diagnosis keeps its meaning, and a learner who under-performs on the probe pays a few extra test-outs, not a wrong course.
+**One-liner:** You can't re-roll the diagnosis, but the quizzes will move you up if it started you too low.
+
+## ADR-0015: The call's input is Pydantic validation context
+**Context:** Some output rules depend on the request. `assess` echoes `claimed_level`; if it echoes the wrong value, the "an adjusted level needs an explanation" rule compares against the wrong claim. Evidence must also cite real question ids. Self-contained model validators can't see the input.
+**Decision:** The LLM wrapper validates with `model_validate_json(text, context={"input": payload})`. Output validators read `info.context["input"]` and raise on a mismatch, which feeds the normal one-retry path (ADR-0013). Without context (reading JSONB back), those checks are skipped.
+**Alternatives:**
+- Overwrite `claimed_level` from the input after validation: it hides the model's mistake, and its other fields (the message) may be built on the wrong claim.
+- Check in the service after the call: no retry, so a fixable error becomes a 502.
+**Consequences:** Request-aware rules stay next to the schema they protect, are unit-testable, and get a retry for free. `map-concepts` can use the same hook (e.g. concept ids referenced by gaps).
+**One-liner:** The output is checked against the question it was answering, and a mismatch earns one retry instead of a silent fix.

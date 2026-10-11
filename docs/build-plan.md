@@ -19,7 +19,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP | Scope | State |
 |---|---|---|
 | CP0 | Foundations: repo, Postgres + Redis 8, FastAPI + Next.js wiring, CI, data model + migrations + seed, login + Redis sessions + dashboard cache, skill registry + `diagnose` scaffold | ✅ merged |
-| CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ⏳ in progress: PC1.1 ✅, next PC1.2 (branch `cp1/create-course`) |
+| CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ⏳ in progress: PC1.1–1.2 ✅, next PC1.3 (branch `cp1/create-course`) |
 | CP2 | J2: learn, check, adapt | |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | |
 | CP4 | J3: org course grounded in docs | |
@@ -90,5 +90,6 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - ~~`StarletteDeprecationWarning`~~: resolved in PC1.1. The Anthropic SDK 1.x depends on `httpx2`, and Starlette's test client picks it up automatically.
 - Draft courses aren't listed on the dashboard (it lists enrollments, which start at accept in PC1.4). Navigating away from a draft loses the link to it until then.
 - Probe idempotency is check-then-insert: two truly concurrent POSTs could both call the model. The UI fires it once from the submit handler; add a lock or a unique constraint if that changes.
-- PC1.2: `assessments.answers` is documented as `{question_id: answer}` but `AssessInput.answers` is a list of `ProbeAnswer`. Pick one shape and align the docs.
+- ~~`assessments.answers` shape~~: resolved in PC1.2. Stored as `{question_id: answer}`; sent to the model as an ordered list.
+- After CP1, consider rerunning `/visualizer:architecture` so `docs/architecture/` gains the assess and map flows (it's generated; don't hand-edit it).
 - Data written back from Redis must be validated with Pydantic (`model_validate`), as in `auth.py` and `dashboard.py`.

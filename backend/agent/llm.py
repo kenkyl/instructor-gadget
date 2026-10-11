@@ -5,7 +5,8 @@ One `run()` does, for a registered skill call:
 2. request structured output (`output_config.format`, a JSON schema built from the call's
    Pydantic output model), with server-side refusal fallback where the model supports it,
 3. validate the reply with Pydantic, including the model's own validators (e.g. "an adjusted
-   level needs an explanation"), and on failure retry once, feeding the errors back,
+   level needs an explanation"), with the input as validation context so validators can check
+   the reply against the request, and on failure retry once, feeding the errors back,
 4. record every API request (ok or not) through a CallSink, which the app writes to llm_calls.
 
 Why not forced tool use: current models (Sonnet 5.5, Opus 5.5) reject `tool_choice` any/tool
@@ -149,7 +150,9 @@ class LLMClient:
             att = _Attempt(c, version, ctx, number, prompt=str(messages[-1]["content"]))
             message = await self._request(system, messages, att)
             try:
-                result = output_type.model_validate_json(_text(message))
+                # The input is validation context, so output validators can check the reply
+                # against the request (e.g. assess: claimed_level must match the claim).
+                result = output_type.model_validate_json(_text(message), context={"input": payload})
             except ValidationError as err:
                 errors = _format_errors(err)
                 await self._log(att, error=f"invalid output:\n{errors}")

@@ -10,11 +10,13 @@ from app.auth import CurrentUserDep
 from app.deps import Db, LlmDep
 from app.models import Course
 from app.services.courses import (
+    AnswersIn,
     CourseDetail,
     CourseIntake,
     course_detail,
     create_course,
     get_owned_course,
+    run_assess,
     run_probe,
 )
 
@@ -51,4 +53,18 @@ async def probe(course: OwnedCourseDep, user: CurrentUserDep, db: Db, llm: LlmDe
     except LLMError as err:
         # Details are in llm_calls; the learner gets a retryable message.
         raise HTTPException(502, "The instructor couldn't write questions. Try again.") from err
+    return await course_detail(db, user, course)
+
+
+@router.post("/{course_id}/assess")
+async def assess(
+    body: AnswersIn, course: OwnedCourseDep, user: CurrentUserDep, db: Db, llm: LlmDep
+) -> CourseDetail:
+    """Assess the probe answers (once; afterwards the result is returned unchanged)."""
+    try:
+        await run_assess(db, llm, user, course, body.answers)
+    except LLMRefusal as err:
+        raise HTTPException(422, "The instructor can't assess these answers.") from err
+    except LLMError as err:
+        raise HTTPException(502, "The instructor couldn't assess your answers. Try again.") from err
     return await course_detail(db, user, course)

@@ -80,7 +80,7 @@ def test_valid_output_first_try() -> None:
     assert rec.status == "ok"
     assert rec.attempt == 1
     assert rec.cache_result == "bypass"  # diagnose is never cached (ADR-0007)
-    assert rec.prompt_version.startswith("diagnose@0.1.0+")
+    assert rec.prompt_version.startswith("diagnose@0.2.0+")
     assert (rec.input_tokens, rec.output_tokens) == (1000, 500)
     assert rec.est_cost_usd == pytest.approx(0.007)
 
@@ -181,3 +181,46 @@ def test_estimate_cost() -> None:
     assert estimate_cost_usd("claude-sonnet-5-5", 2_000, 1_000) == pytest.approx(0.014)
     assert estimate_cost_usd("claude-opus-5-5", 1_000, 1_000) == pytest.approx(0.024)
     assert estimate_cost_usd("some-future-model", 1_000, 1_000) == 0.0
+
+
+ASSESS_IN = AssessInput(
+    config=PROBE_IN.config, mission=PROBE_IN.mission, probe=GOOD_PROBE, answers=[]
+)
+
+
+def assessed(**overrides) -> dict:
+    out = {
+        "claimed_level": "intermediate",
+        "assessed_level": "intermediate",
+        "confidence": 0.7,
+        "evidence": [{"question_id": "q1", "observation": "solid", "points_to": "intermediate"}],
+        "gaps": [],
+        "adjustment_message": None,
+    }
+    return {**out, **overrides}
+
+
+@pytest.mark.parametrize(
+    ("bad", "error"),
+    [
+        # Echoing the wrong claim would let a re-level skip its explanation.
+        (assessed(claimed_level="novice", assessed_level="novice"), "claimed_level must be"),
+        (
+            assessed(evidence=[{"question_id": "q9", "observation": "x", "points_to": "novice"}]),
+            "unknown question ids ['q9']",
+        ),
+    ],
+)
+def test_assess_output_is_checked_against_its_input(bad: dict, error: str) -> None:
+    fake = FakeAnthropic(message(bad), message(assessed()))
+    llm, sink = make(fake)
+
+    asyncio.run(llm.run("diagnose", "assess", ASSESS_IN, AssessOutput, ctx=CallContext()))
+
+    assert error in (sink.records[0].error or "")
+    assert [r.status for r in sink.records] == ["error", "ok"]
+
+
+def test_stored_results_validate_without_context() -> None:
+    # Reading JSONB back has no input to compare against; only the self-contained rules run.
+    AssessOutput.model_validate(assessed(claimed_level="novice", assessed_level="novice"))
