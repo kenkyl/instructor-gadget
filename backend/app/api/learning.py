@@ -1,4 +1,4 @@
-"""Learning-loop endpoints (J2). Thin adapter over app/services/learning.py."""
+"""Learning-loop endpoints (J2). Thin adapter over app/services/learning.py and quiz.py."""
 
 import uuid
 from collections.abc import AsyncIterator
@@ -22,6 +22,21 @@ from app.services.learning import (
     latest_lesson,
     prepare_lesson,
     stream_lesson,
+)
+from app.services.quiz import (
+    OverrideRequest,
+    OverrideWarning,
+    PlanVersionView,
+    QuizResult,
+    QuizView,
+    SubmitRequest,
+    accept_test_out,
+    confirm_override,
+    open_quiz,
+    override_warning,
+    plan_history,
+    quiz_result,
+    submit_quiz,
 )
 
 router = APIRouter(prefix="/enrollments", tags=["learning"])
@@ -93,3 +108,69 @@ async def open_lesson(
         yield ServerSentEvent(
             event="error", data={"message": "The instructor couldn't write this lesson. Retry."}
         )
+
+
+@router.get("/{enrollment_id}/plans")
+async def get_plan_history(
+    enrollment_id: uuid.UUID, user: CurrentUserDep, db: Db
+) -> list[PlanVersionView]:
+    """Every plan version, newest first, with its trigger, rule, why and diff (spec §4.8)."""
+    return await plan_history(db, user, enrollment_id)
+
+
+@router.post("/{enrollment_id}/concepts/{concept_id}/quiz")
+async def post_quiz(
+    enrollment_id: uuid.UUID, concept_id: str, user: CurrentUserDep, db: Db, llm: LlmDep
+) -> QuizView:
+    """The open quiz for this concept, or a new one (no answer keys in the response)."""
+    return await open_quiz(db, llm, user, enrollment_id, concept_id)
+
+
+@router.post("/{enrollment_id}/quiz-attempts/{attempt_id}/submit")
+async def post_submit(
+    enrollment_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+    body: SubmitRequest,
+    user: CurrentUserDep,
+    db: Db,
+    redis: RedisDep,
+    llm: LlmDep,
+) -> QuizResult:
+    """Grade, update mastery and the review date, then apply the adapt rules."""
+    return await submit_quiz(db, redis, llm, user, enrollment_id, attempt_id, body.answers)
+
+
+@router.get("/{enrollment_id}/quiz-attempts/{attempt_id}")
+async def get_quiz_result(
+    enrollment_id: uuid.UUID, attempt_id: uuid.UUID, user: CurrentUserDep, db: Db
+) -> QuizResult:
+    return await quiz_result(db, user, enrollment_id, attempt_id)
+
+
+@router.post("/{enrollment_id}/concepts/{concept_id}/test-out")
+async def post_test_out(
+    enrollment_id: uuid.UUID, concept_id: str, user: CurrentUserDep, db: Db, redis: RedisDep
+) -> PlanVersionView:
+    """Accept the test-out offer after a 4 (ADR-0006): a new plan version."""
+    return await accept_test_out(db, redis, user, enrollment_id, concept_id)
+
+
+@router.get("/{enrollment_id}/concepts/{concept_id}/override")
+async def get_override_warning(
+    enrollment_id: uuid.UUID, concept_id: str, user: CurrentUserDep, db: Db, llm: LlmDep
+) -> OverrideWarning:
+    """What will break if the learner opens this locked concept now (spec §4.8)."""
+    return await override_warning(db, llm, user, enrollment_id, concept_id)
+
+
+@router.post("/{enrollment_id}/concepts/{concept_id}/override")
+async def post_override(
+    enrollment_id: uuid.UUID,
+    concept_id: str,
+    body: OverrideRequest,
+    user: CurrentUserDep,
+    db: Db,
+    redis: RedisDep,
+) -> PlanVersionView:
+    """Open a locked concept anyway: logged, with a new plan version."""
+    return await confirm_override(db, redis, user, enrollment_id, concept_id, body.warning)

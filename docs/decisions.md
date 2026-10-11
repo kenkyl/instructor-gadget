@@ -262,3 +262,28 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Calling FastAPI directly for this endpoint (the build plan's fallback): cross-origin cookies and CORS for one route.
 **Consequences:** Lesson events arrive as they're written (first text ~1.3 s, the full lesson ~12 s), and every other response is still compressed. Any future streaming endpoint must send the same header.
 **One-liner:** The proxy wasn't the problem, gzip was; `no-transform` opts the stream out of it.
+
+## ADR-0021: Two quiz calls: a shareable, exact-cached `design` and a never-cached `design_targeted`
+**Context:** ADR-0007 says quizzes are exact-cached on the lesson's content, and also that any request carrying a learner's logged misconceptions is never cached. §4.6 wants distractors drawn from *this learner's* misconceptions, so after a miss, the next quiz is personal. A retake of the same lesson must also not return the same questions.
+**Decision:**
+- `design-assessment` has two calls. `design` (cache `exact`) takes the concept, the lesson's text and a `round` number, with no learner data. `design_targeted` (cache `never`) adds the open misconceptions for the concept and its prereqs, and a validator requires at least one question to target one of them.
+- The service picks the call: any open misconception → `design_targeted`. The cache policy stays declared per call in `SKILL.md`, not decided in code.
+- `round` (prior submitted attempts + 1) is part of the input, so a retake is a new quiz while round 1 of a shared lesson stays an exact hit across learners.
+**Alternatives:**
+- One call with a code-side "skip the cache if personal" flag: hides the policy from the skill's declaration, which is what reviewers and the trace read.
+- Never caching quizzes: about 3.5¢ and 20 s per quiz for every learner, including the ones a shared lesson already served.
+**Consequences:** A learner with no logged beliefs gets a shared quiz. After any miss, quizzes are personal and slower. The quiz is prefetched while the learner reads the lesson, to hide the ~20 s.
+**One-liner:** The quiz is shared until you've shown a misconception; then it's yours and never cached.
+
+## ADR-0022: Remediation is an inserted prerequisite; only structural changes version the plan
+**Context:** §4.8 inserts a remediation concept after a score of 1–2 and says every plan change creates a new version. We have to decide where the remediation goes, how the learner gets back to the original, and which events count as "plan changes" (unlocking happens after almost every quiz).
+**Decision:**
+- The remediation concept (`{id}-remedy-{n}`) is inserted **before** the failed concept, takes its prereqs, and becomes a new prereq of it. The existing gate then does the rest: the remedy unlocks, the original re-locks, and when the remedy is solid the original reopens for a retake. `pedagogy.adapt` caps remediations at 2 per concept (`MAX_REMEDIATIONS`); after that a low score asks for a retake (no endless loops).
+- Plan-state fields set by code (`Concept.remedy`, `ConceptMap.test_out`) are hidden from the model's output schema (`SkipJsonSchema`), so `map-concepts` can't set them.
+- New plan versions only for **structural** changes: an inserted remediation, an accepted test-out, an override. Unlocks and completions are progress state, reported in the result and the diff's `status_changes`, not versions of their own.
+- A picked MCQ distractor logs its tagged misconception deterministically. The grader adds one from the short answer, and that one is listed first.
+**Alternatives:**
+- Remediation as a detour outside the graph: needs a second gating mechanism.
+- A version per unlock: the history fills with noise, and the "why" loses its meaning.
+**Consequences:** One gating rule covers prereqs, remediation and the retake loop. The plan history reads as decisions (diagnosis, remediation, test-out, override).
+**One-liner:** A remediation is just a new prerequisite, so the gate we already trust does the re-locking.

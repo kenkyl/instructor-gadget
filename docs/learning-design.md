@@ -129,6 +129,7 @@ Deterministic rules decide; the LLM only writes the explanation and remediation 
 | 3 | Concept → solid (first attempt, or after a 2; after a 1 it takes one more attempt, see §4.9) | Continue. Dependents unlock once the band is solid; if it isn't yet, the learner retakes the quiz (no remediation) |
 | 1–2 | Concept → shaky/learning | Dependents stay locked. **Insert a remediation concept** that re-teaches from a *different angle* and targets the named misconception |
 
+- **Remediation mechanics** (ADR-0022): the remediation concept is inserted as a new prerequisite of the failed concept, so the gate re-locks the original until the remediation is solid, then the learner retakes it. At most 2 remediations per concept; after that a low score asks for a retake.
 - **Prerequisite gate:** a concept unlocks when all its prerequisites are **solid or better**.
 - **Override:** a learner may open a locked concept after a specific warning about what will break without the prerequisite. The override is logged. They're adults; they should know the cost.
 - **Every plan change creates a new plan version** with a trigger and a plain-English "why" naming the score and the misconception, shown as a diff.

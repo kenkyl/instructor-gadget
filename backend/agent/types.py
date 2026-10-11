@@ -5,6 +5,7 @@ from enum import StrEnum
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, ValidationInfo, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from agent import plan
 
@@ -55,6 +56,22 @@ class Mission(BaseModel):
 SLUG = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 
 
+class Misbelief(BaseModel):
+    """A specific wrong belief (spec §4.6–4.7): what a distractor represents, or what the grader
+    found. Logged to `misconceptions` when a learner shows it."""
+
+    label: str = Field(max_length=120, description="Short name, e.g. 'requests = limits'")
+    note: str = Field(description="The underlying belief in one plain sentence")
+
+
+class Remedy(BaseModel):
+    """Set by code (never the model) on a remediation concept inserted by the adapt rules."""
+
+    for_concept: str  # the concept it re-teaches
+    angle: str  # the different angle it takes (spec §4.8)
+    misconception: Misbelief | None  # the named belief it attacks
+
+
 class Concept(BaseModel):
     id: str = Field(pattern=SLUG, max_length=64, description="Short kebab-case slug")
     title: str = Field(max_length=120)
@@ -63,15 +80,27 @@ class Concept(BaseModel):
     prereqs: list[str] = Field(description="Ids of direct prerequisites in this map")
     est_minutes: int = Field(ge=5, le=120, description="Lesson + quiz time")
     concept_type: ConceptType
+    # Plan state set by code: hidden from the model's output schema (SkipJsonSchema).
+    remedy: SkipJsonSchema[Remedy | None] = None
+
+    @property
+    def is_remediation(self) -> bool:
+        return self.remedy is not None
 
 
 class ConceptMap(BaseModel):
     """Stored in courses.template_plan and plan_versions.plan. These graph rules hold for
     every stored map, including after the learner cuts concepts (PC1.4)."""
 
-    concepts: list[Concept] = Field(min_length=1, max_length=20)
+    # 20 core concepts at most, plus room for remediation concepts the adapt rules insert.
+    concepts: list[Concept] = Field(min_length=1, max_length=40)
     sequence: list[str] = Field(description="Every concept id once, each after its prereqs")
     sequence_rationale: str = Field(description="Why this order, written to the learner")
+    # Concepts the learner chose to test out of: no lesson, straight to the quiz (ADR-0006).
+    test_out: SkipJsonSchema[list[str]] = Field(default_factory=list)
+
+    def concept(self, concept_id: str) -> Concept | None:
+        return next((c for c in self.concepts if c.id == concept_id), None)
 
     def graph(self) -> dict[str, list[str]]:
         return {c.id: c.prereqs for c in self.concepts}
@@ -89,6 +118,28 @@ class ConceptMap(BaseModel):
         if errors:
             raise ValueError("; ".join(errors))
         return self
+
+
+class PrereqChange(BaseModel):
+    concept_id: str
+    added: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+
+
+class StatusChange(BaseModel):
+    concept_id: str
+    old: str  # a ConceptStatus value (app.models); kept a string so agent/ never imports app/
+    new: str
+
+
+class PlanDiff(BaseModel):
+    """Stored in plan_versions.diff: what changed against the previous version (spec §4.8)."""
+
+    added: list[Concept] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    prereq_changes: list[PrereqChange] = Field(default_factory=list)
+    status_changes: list[StatusChange] = Field(default_factory=list)
+    test_out: list[str] = Field(default_factory=list)  # concepts the learner chose to test out of
 
 
 class MapInput(BaseModel):
@@ -161,3 +212,170 @@ class LessonOutput(BaseModel):
         if any(line.strip().startswith("click ") for line in src.splitlines()):
             raise ValueError("diagram_mermaid must not use click directives")
         return self
+
+
+# --- quizzes (spec §4.6) -----------------------------------------------------------------------
+QUIZ_MCQS = 4  # = pedagogy.MCQ_QUESTIONS
+
+
+class LessonDigest(BaseModel):
+    """What the quiz designer needs from the lesson: its situations, so the quiz can avoid them."""
+
+    explanation_md: str
+    example_md: str
+
+
+class QuizInput(BaseModel):
+    """design-assessment.design input: shareable (no learner data), so it's exact-cached and
+    keyed on the lesson's content (ADR-0007). `round` makes a retake a different quiz."""
+
+    topic: str
+    target_level: TargetLevel
+    concept: Concept
+    lesson: LessonDigest | None  # None when the learner tests out (ADR-0006)
+    round: int = Field(ge=1)
+
+
+class TargetedQuizInput(QuizInput):
+    """design-assessment.design_targeted input: includes this learner's logged misconceptions,
+    so it is never cached (ADR-0007)."""
+
+    misconceptions: list[Misbelief] = Field(min_length=1)
+
+
+class Option(BaseModel):
+    id: str = Field(pattern=r"^[a-d]$")
+    text: str
+    misconception: Misbelief | None = Field(
+        description="null only for the correct option; every distractor names its belief"
+    )
+
+
+class MCQ(BaseModel):
+    id: str = Field(pattern=r"^q[1-4]$")
+    prompt: str
+    options: list[Option] = Field(min_length=4, max_length=4)
+    answer: str = Field(pattern=r"^[a-d]$", description="Id of the correct option")
+    transfer_situation: str = Field(description="The new situation, not one from the lesson")
+    objective_level: Bloom
+    targets_logged_misconception: str | None = Field(
+        description="Label of a logged misconception a distractor targets, else null"
+    )
+
+    @model_validator(mode="after")
+    def one_correct_option(self) -> Self:
+        ids = [o.id for o in self.options]
+        if sorted(ids) != ["a", "b", "c", "d"]:
+            raise ValueError(f"{self.id}: option ids must be a, b, c, d; got {ids}")
+        correct = [o.id for o in self.options if o.misconception is None]
+        if correct != [self.answer]:
+            raise ValueError(
+                f"{self.id}: exactly the answer option ({self.answer}) must have a null "
+                f"misconception; options without one: {correct}"
+            )
+        return self
+
+
+class Rubric(BaseModel):
+    score_1: str = Field(description="Wrong, or right for the wrong reason")
+    score_2: str = Field(description="Partially right with visible gaps")
+    score_3: str = Field(description="Right, clearly, in their own words")
+    score_4: str = Field(description="Right plus correctly handles the transfer case")
+
+
+class ShortItem(BaseModel):
+    id: Literal["explain"] = "explain"
+    prompt: str
+    transfer_situation: str
+    rubric: Rubric
+
+
+class QuizOutput(BaseModel):
+    """Stored in quiz_attempts.questions, answer keys included. The API sends `public()`."""
+
+    questions: list[MCQ] = Field(min_length=QUIZ_MCQS, max_length=QUIZ_MCQS)
+    explain_item: ShortItem
+
+    @model_validator(mode="after")
+    def fits_concept(self, info: ValidationInfo) -> Self:
+        ids = [q.id for q in self.questions]
+        if ids != [f"q{i}" for i in range(1, QUIZ_MCQS + 1)]:
+            raise ValueError(f"question ids must be q1..q{QUIZ_MCQS} in order; got {ids}")
+        inp = (info.context or {}).get("input")
+        if not isinstance(inp, QuizInput):
+            return self
+        level = inp.concept.objective_level
+        if not any(q.objective_level == level for q in self.questions):
+            raise ValueError(f"at least one question must be at the objective level '{level}'")
+        if isinstance(inp, TargetedQuizInput):
+            logged = {m.label for m in inp.misconceptions}
+            if not any(q.targets_logged_misconception in logged for q in self.questions):
+                raise ValueError(
+                    f"at least one question must target a logged misconception: {logged}"
+                )
+        return self
+
+
+# --- grading (spec §4.7) -----------------------------------------------------------------------
+class GradeInput(BaseModel):
+    """grade.grade input: the learner's own words, so never cached."""
+
+    concept_title: str
+    mastery_statement: str
+    item: ShortItem
+    answer: str
+
+
+class GradeOutput(BaseModel):
+    transfer_handled: bool = Field(description="Did the answer correctly handle the transfer case?")
+    score: Literal[1, 2, 3, 4]
+    feedback: str = Field(description="To the learner: what was right, what wasn't, and why")
+    misconception: Misbelief | None = Field(description="The wrong belief shown, if any")
+
+    @model_validator(mode="after")
+    def four_needs_transfer(self) -> Self:
+        if self.score == 4 and not self.transfer_handled:
+            raise ValueError("a 4 requires transfer (spec §4.7); without it the most is 3")
+        return self
+
+
+# --- remediation and the "why" (spec §4.8) -----------------------------------------------------
+class RemedyConcept(BaseModel):
+    title: str = Field(max_length=120)
+    mastery_statement: str = Field(description='Starts "You can …"')
+    angle: str = Field(description="How it re-teaches differently from the original lesson")
+
+
+class ExplainInput(BaseModel):
+    """remediate.explain_change input (never cached: it carries misconceptions)."""
+
+    concept: Concept
+    score: Literal[1, 2, 3, 4]
+    rule: str  # the pedagogy rule that fired
+    misconceptions: list[Misbelief]
+    lesson_explanation: str | None  # what the first lesson said, so the remedy differs
+
+
+class ExplainOutput(BaseModel):
+    why: str = Field(description="Plain English, to the learner: names the score and the belief")
+    remediation_concept: RemedyConcept
+
+
+class WarningInput(BaseModel):
+    concept: Concept
+    unmet_prereqs: list[Concept]
+
+
+class WarningOutput(BaseModel):
+    what_will_break: str = Field(description="Specific: what they'll misread or get stuck on")
+
+
+class RemediationLessonInput(BaseModel):
+    """remediate.lesson input: a lesson for a remediation concept (never cached)."""
+
+    topic: str
+    target_level: TargetLevel
+    analogy_domain: str | None
+    concept: Concept  # the remediation concept; `remedy` names the angle and the belief
+    original_concept_title: str
+    original_explanation: str | None

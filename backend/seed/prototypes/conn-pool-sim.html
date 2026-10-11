@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection-pool exhaustion simulator</title>
+<!--
+  Seeded prototype (learning-design §4.5, "systems" type: knobs + a counter showing what breaks).
+  Self-contained: no network, no storage. It only ever runs in a sandboxed iframe
+  (sandbox="allow-scripts", no same-origin).
+
+  Model: requests arrive at random (Poisson, `rate` per second). Each needs one connection from
+  a pool of `pool` for a query that takes `latency` ms on average (exponential). With no free
+  connection a request waits in a FIFO queue; after `timeout` ms of waiting it fails (a 5xx).
+  Utilization = rate × latency ÷ pool. Waiting grows non-linearly as it approaches 100%.
+-->
+<style>
+  :root { --fg:#111; --muted:#666; --ok:#0a7d32; --warn:#b26a00; --bad:#c62828; --line:#ddd; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; font:14px/1.4 system-ui, sans-serif; color:var(--fg); background:#fff; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  p.sub { margin:0 0 12px; color:var(--muted); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:12px; }
+  label { display:block; font-weight:600; }
+  label span { font-weight:400; color:var(--muted); }
+  input[type=range] { width:100%; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin:14px 0; }
+  .stat { border:1px solid var(--line); border-radius:6px; padding:8px; }
+  .stat b { display:block; font-size:20px; font-variant-numeric:tabular-nums; }
+  .stat small { color:var(--muted); }
+  #state { font-weight:700; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  canvas { width:100%; height:150px; border:1px solid var(--line); border-radius:6px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  button { font:inherit; padding:4px 10px; border:1px solid #bbb; border-radius:6px; background:#f7f7f7; cursor:pointer; }
+  .legend { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<h1>Connection-pool exhaustion simulator</h1>
+<p class="sub">Change the load, the pool and the query time. Watch what breaks first, and when.</p>
+
+<div class="grid">
+  <div><label for="rate">Request rate <span id="rateV"></span></label>
+    <input id="rate" type="range" min="10" max="400" step="5" value="120"></div>
+  <div><label for="pool">Pool size <span id="poolV"></span></label>
+    <input id="pool" type="range" min="1" max="50" step="1" value="10"></div>
+  <div><label for="latency">Query latency (mean) <span id="latencyV"></span></label>
+    <input id="latency" type="range" min="5" max="200" step="1" value="50"></div>
+  <div><label for="timeout">Request timeout <span id="timeoutV"></span></label>
+    <input id="timeout" type="range" min="100" max="5000" step="100" value="1000"></div>
+</div>
+
+<div class="stats">
+  <div class="stat"><small>Status</small><b id="state">–</b></div>
+  <div class="stat"><small>Pool utilization</small><b id="util">–</b></div>
+  <div class="stat"><small>Connections in use</small><b id="busy">–</b></div>
+  <div class="stat"><small>Requests queued</small><b id="queue">–</b></div>
+  <div class="stat"><small>p95 wait for a connection</small><b id="p95">–</b></div>
+  <div class="stat"><small>Timeouts (5xx) per second</small><b id="tps">–</b></div>
+  <div class="stat"><small>5xx rate</small><b id="err">–</b></div>
+</div>
+
+<canvas id="chart" width="800" height="150"></canvas>
+<div class="legend">Last 60 s. <span style="color:#1565c0">■</span> p95 wait (ms, log scale) &nbsp;
+  <span style="color:#c62828">■</span> 5xx rate (%) &nbsp; <span style="color:#999">┄</span> 100 ms wait</div>
+
+<div class="row">
+  <button id="pause">Pause</button>
+  <button id="reset">Reset</button>
+  <button data-preset="spike">Traffic spike: 150 → 210 req/s</button>
+  <button data-preset="slow">Slow query: 50 → 65 ms</button>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const knobs = { rate: $("rate"), pool: $("pool"), latency: $("latency"), timeout: $("timeout") };
+  const units = { rate: " req/s", pool: " connections", latency: " ms", timeout: " ms" };
+  const val = (k) => Number(knobs[k].value);
+
+  // Simulation state (times in ms of simulated time).
+  let now = 0, nextArrival = 0, paused = false;
+  let busyUntil = [];   // one entry per busy connection: when its query finishes
+  let queue = [];       // arrival times of requests waiting for a connection (FIFO)
+  let served = [];      // [finishedWaitingAt, waitMs] for requests that got a connection
+  let failed = [];      // times of requests that timed out waiting
+  let history = [];     // [t, p95, errPct] once per second for the chart
+  const WINDOW = 5000;  // stats are over the last 5 s
+
+  const exp = (mean) => -Math.log(1 - Math.random()) * mean;
+
+  function reset() {
+    now = 0; nextArrival = exp(1000 / val("rate"));
+    busyUntil = []; queue = []; served = []; failed = []; history = [];
+  }
+
+  function expireWaiting() {
+    const timeout = val("timeout");
+    while (queue.length && now - queue[0] >= timeout) failed.push(queue.shift() + timeout);
+  }
+
+  function dispatch() {
+    const pool = val("pool");
+    while (queue.length && busyUntil.length < pool) {
+      const arrived = queue.shift();
+      served.push([now, now - arrived]);
+      busyUntil.push(now + exp(val("latency")));
+    }
+  }
+
+  // Event-driven: jump from event to event (arrival or a query finishing) up to time `to`.
+  function advance(to) {
+    for (;;) {
+      let soonestDone = Infinity, idx = -1;
+      for (let i = 0; i < busyUntil.length; i++) if (busyUntil[i] < soonestDone) { soonestDone = busyUntil[i]; idx = i; }
+      const t = Math.min(nextArrival, soonestDone);
+      if (t > to) break;
+      now = t;
+      expireWaiting();
+      if (t === nextArrival) { queue.push(t); nextArrival = t + exp(1000 / val("rate")); }
+      else busyUntil.splice(idx, 1);
+      dispatch();
+    }
+    now = to;
+    expireWaiting();
+    // A smaller pool takes effect as queries finish; connections never exceed the pool when freed.
+  }
+
+  function stats() {
+    const since = now - WINDOW;
+    served = served.filter(([t]) => t >= since);
+    failed = failed.filter((t) => t >= since);
+    const waits = served.map(([, w]) => w).sort((a, b) => a - b);
+    const p95 = waits.length ? waits[Math.min(waits.length - 1, Math.floor(waits.length * 0.95))] : 0;
+    const total = waits.length + failed.length;
+    const secs = Math.min(WINDOW, now) / 1000 || 1;
+    return { p95, tps: failed.length / secs, err: total ? (100 * failed.length) / total : 0 };
+  }
+
+  function render(s) {
+    for (const k of Object.keys(knobs)) $(k + "V").textContent = "(" + val(k) + units[k] + ")";
+    const util = (val("rate") * val("latency")) / (1000 * val("pool"));
+    $("util").textContent = Math.round(util * 100) + "%";
+    $("busy").textContent = busyUntil.length + " / " + val("pool");
+    $("queue").textContent = queue.length;
+    $("p95").textContent = s.p95 < 1 ? "<1 ms" : Math.round(s.p95) + " ms";
+    $("tps").textContent = s.tps.toFixed(1);
+    $("err").textContent = s.err.toFixed(1) + "%";
+    const state = $("state");
+    if (s.err > 0.5) { state.textContent = "Failing (5xx)"; state.className = "bad"; }
+    else if (s.p95 > 100) { state.textContent = "Queueing"; state.className = "warn"; }
+    else { state.textContent = "Healthy"; state.className = "ok"; }
+    drawChart();
+  }
+
+  function drawChart() {
+    const c = $("chart"), g = c.getContext("2d"), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    const x = (t) => W - ((now - t) / 60000) * W;
+    const yWait = (ms) => H - (Math.log10(Math.max(1, ms)) / 4) * H; // 1 ms .. 10 s
+    g.strokeStyle = "#999"; g.setLineDash([4, 4]); g.beginPath();
+    g.moveTo(0, yWait(100)); g.lineTo(W, yWait(100)); g.stroke(); g.setLineDash([]);
+    const line = (color, y) => {
+      g.strokeStyle = color; g.lineWidth = 2; g.beginPath();
+      history.forEach((h, i) => (i ? g.lineTo(x(h[0]), y(h)) : g.moveTo(x(h[0]), y(h))));
+      g.stroke();
+    };
+    line("#1565c0", (h) => yWait(h[1]));
+    line("#c62828", (h) => H - (h[2] / 100) * H);
+  }
+
+  let last = performance.now(), lastSample = 0;
+  function frame(ts) {
+    const dt = Math.min(100, ts - last); // a backgrounded tab doesn't replay minutes at once
+    last = ts;
+    if (!paused) {
+      advance(now + dt);
+      const s = stats();
+      if (now - lastSample >= 1000) { history.push([now, s.p95, s.err]); lastSample = now; }
+      history = history.filter(([t]) => t >= now - 60000);
+      render(s);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  $("pause").onclick = () => { paused = !paused; $("pause").textContent = paused ? "Resume" : "Pause"; };
+  $("reset").onclick = () => { reset(); lastSample = 0; };
+  for (const b of document.querySelectorAll("[data-preset]")) {
+    b.onclick = () => {
+      if (b.dataset.preset === "spike") {
+        knobs.rate.value = 150; knobs.pool.value = 10; knobs.latency.value = 50;
+        setTimeout(() => (knobs.rate.value = 210), 8000);
+      } else {
+        knobs.rate.value = 180; knobs.pool.value = 10; knobs.latency.value = 50;
+        setTimeout(() => (knobs.latency.value = 65), 8000);
+      }
+    };
+  }
+  for (const k of Object.values(knobs)) k.oninput = () => render(stats());
+
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

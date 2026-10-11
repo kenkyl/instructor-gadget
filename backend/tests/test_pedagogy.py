@@ -9,18 +9,25 @@ from fsrs import Rating, State
 from pydantic import ValidationError
 
 from agent.pedagogy import (
+    MAX_REMEDIATIONS,
     RATING,
+    Rule,
     Score,
+    adapt,
     band,
     combine,
+    course_complete,
     initially_unlocked,
+    insert_remediation,
     load_card,
     mcq_score,
+    remediation_count,
+    remediation_id,
     schedule_review,
     unlocked,
     update_mastery,
 )
-from agent.types import Band
+from agent.types import Band, ConceptMap, Misbelief
 
 NOW = datetime(2026, 10, 11, 9, 0, tzinfo=UTC)
 
@@ -155,3 +162,80 @@ class TestScheduleReview:
     def test_load_card_rejects_a_bad_shape(self) -> None:
         with pytest.raises(ValidationError):
             load_card({"state": "review"})
+
+
+# --- Adaptation (§4.8, PC2.5) ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("score", "new_band", "remediations", "rule"),
+    [
+        (4, Band.mastered, 0, Rule.offer_test_out),
+        (4, Band.solid, 0, Rule.offer_test_out),  # 4 after a weak attempt: solid, still offer
+        (3, Band.solid, 0, Rule.advance),
+        (3, Band.learning, 0, Rule.retake),  # 3 after a 1: mastery 0.62 (§4.9)
+        (2, Band.learning, 0, Rule.insert_remediation),
+        (1, Band.shaky, 1, Rule.insert_remediation),
+        (1, Band.shaky, MAX_REMEDIATIONS, Rule.retake),  # no endless remediation loops
+    ],
+)
+def test_adapt_branch_table(score: Score, new_band: Band, remediations: int, rule: Rule) -> None:
+    assert adapt(score, new_band, remediations) == rule
+
+
+def _chain() -> ConceptMap:
+    def c(cid: str, prereqs: list[str]) -> dict:
+        return {
+            "id": cid,
+            "title": cid.title(),
+            "mastery_statement": f"You can use {cid}.",
+            "objective_level": "apply",
+            "prereqs": prereqs,
+            "est_minutes": 20,
+            "concept_type": "systems",
+        }
+
+    return ConceptMap.model_validate(
+        {
+            "concepts": [c("a", []), c("b", ["a"]), c("c", ["b"])],
+            "sequence": ["a", "b", "c"],
+            "sequence_rationale": "chain",
+        }
+    )
+
+
+def test_insert_remediation_goes_before_and_relocks_the_concept() -> None:
+    belief = Misbelief(label="ttl = eviction", note="Thinks a TTL evicts under memory pressure.")
+    new, diff = insert_remediation(
+        _chain(),
+        "b",
+        title="T",
+        mastery_statement="You can x.",
+        angle="trace",
+        misconception=belief,
+    )
+    remedy = new.concept("b-remedy-1")
+    assert remedy is not None and remedy.prereqs == ["a"]  # opens now: same prereqs as b
+    assert remedy.remedy and remedy.remedy.for_concept == "b" and remedy.remedy.misconception
+    assert new.concept("b").prereqs == ["a", "b-remedy-1"]  # type: ignore[union-attr]
+    assert new.sequence == ["a", "b-remedy-1", "b", "c"]
+    assert [c.id for c in diff.added] == ["b-remedy-1"]
+    assert diff.prereq_changes[0].concept_id == "b"
+    # The gate: with a solid, the remedy unlocks and b does not until the remedy is solid.
+    assert unlocked(new.graph(), {"a": Band.solid}) == {"a", "b-remedy-1"}
+    again, _ = insert_remediation(
+        new, "b", title="T2", mastery_statement="You can y.", angle="contrast", misconception=None
+    )
+    assert remediation_count(again, "b") == 2 and again.concept("b-remedy-2")
+
+
+def test_remediation_id_fits_the_slug_limit() -> None:
+    long = "x" * 64
+    rid = remediation_id(long, 1)
+    assert len(rid) <= 64 and rid.endswith("-remedy-1")
+
+
+def test_course_complete_needs_every_concept_solid() -> None:
+    assert course_complete({"a": Band.solid, "b": Band.mastered})
+    assert not course_complete({"a": Band.solid, "b": Band.learning})
+    assert not course_complete({"a": Band.solid, "b": None})

@@ -1,14 +1,30 @@
 # Build log
 
-> **Current status:** CP2 / PC2.2 ✅ (`teach-concept` streamed over SSE, exact-match cache `llm:exact:*` + `idx:llm_exact`, Mermaid in a sandboxed iframe; ADR-0019, ADR-0020). Next: **PC2.3** (connection-pool simulator prototype in a sandboxed iframe) on branch `cp2/learn-check-adapt` (draft PR #3).
+> **Current status:** CP2 ✅ complete (PC2.1–PC2.6: lessons, quiz, grading, adaptation, gate, test-out; ADR-0018–0022). PR #3 (`cp2/learn-check-adapt`) is ready for Kyle's review and merge. Next: **CP3 / PC3.1** (RedisVL semantic cache) on a new branch `cp3/redis-deep-dive` after the merge.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
 ---
 
-## CP2 notes (in progress; folded into the CP2 entry when CP2 closes)
+## CP2: Learn, check, adapt (Sun 2026-10-11, PR #3)
 
+**What we built**
+- **PC2.1, pedagogy rules:** `agent/pedagogy.py`, pure and unit-tested: MCQ score, the lower-of-two combine, recency-weighted mastery (ADR-0005), bands, the unlock gate, and day-scale `fsrs` scheduling (ADR-0018).
+- **PC2.2, streamed lessons + exact cache:** `teach-concept` streamed over SSE field by field (partial JSON → `field_delta`), the exact-match cache (`llm:exact:*` native JSON + `idx:llm_exact`, hits logged with saved cost and time), Mermaid rendered in a fully sandboxed iframe (ADR-0019, ADR-0020).
+- **PC2.3, seeded prototype:** a connection-pool exhaustion simulator (`backend/seed/prototypes/conn-pool-sim.html`, seeded by `make seed`). Event-driven Poisson arrivals, exponential query times, a FIFO wait queue with a checkout timeout; it shows status, utilization, queue, p95 wait and 5xx rate, with spike and slow-query presets. It's shown in `<iframe sandbox="allow-scripts" srcdoc>` on lessons whose concept is about connection pools, for hands-on learners. Checked against queueing theory (Erlang C): p95 wait is ~50 ms at 85% utilization, ~0.5 s at 95%, and timeouts past 100%.
+- **PC2.4, quiz + grading:** `design-assessment` (4 transfer MCQs, each distractor tagged with the belief it represents, plus an explain item with a rubric; keys, tags and rubric never leave the server before submission), `grade` (1–4; a 4 requires transfer, enforced by a validator), the shared vs targeted quiz split (ADR-0021), misconception logging from picked distractors and the grader.
+- **PC2.5, adaptation:** `pedagogy.adapt` (the branch table), remediation inserted as a new prerequisite (ADR-0022), `remediate` (`explain_change` writes the why and the remediation concept, `lesson` streams its lesson, never cached), plan versions with a diff and a why, and the plan-history UI.
+- **PC2.6, gate + test-out:** override with an LLM-written, specific warning (logged, a plan version), test-out after a 4 (a plan version; the next concept's quiz without its lesson, ADR-0006), course completion, and 8 draft grader answers for Kyle to label (`backend/evals/grader_calibration.yaml`).
+- **Numbers (live, one learner, end to end):** lesson first text 1.3 s, full lesson ~13 s ($0.02); quiz design 17–24 s ($0.035, the slowest call, so it's prefetched while the learner reads); grading 2.4–3 s; a bad attempt → remediation + why in 9 s. A full J1 + J2 pass (course, 3 lessons, 5 quizzes, 3 grades, remediation, override) cost about **$0.27**. 157 deterministic tests.
+
+**Key prompts**
+- "We're speeding up for time. Skip my turn, do it yourself, verify, then give me brief answers to the check questions." The AI wrote the PC2.1–PC2.5 ★ pieces against the pre-written tests; Kyle's open ★ is labelling the 8 grader answers.
+- "Build out up to CP3, then give me a summary and steps to test." PC2.3–PC2.6 were built and verified live in one pass.
+
+**Decisions:** ADR-0018 (day-scale FSRS), ADR-0019 (search indexes on DB 0), ADR-0020 (SSE `no-transform`), ADR-0021 (shared vs targeted quiz calls), ADR-0022 (remediation as an inserted prerequisite; only structural changes version the plan).
+
+**Where the AI went wrong or was corrected**
 - **PC2.1:** checking the installed `fsrs` 6.3.2 source (not memory) showed its defaults are flashcard-scale (1 min / 10 min steps). A Good first quiz would have been "due" 10 minutes later. Fix: a day-scale scheduler (ADR-0018). `Band` moved to `agent/types.py` so `agent/` never imports `app/`. CLAUDE.md, the checkpoint skill and the build plan now say Kyle merges PRs. Kyle skipped the ★ to save time, so the AI wrote `mcq_score`/`combine`/`update_mastery`/`band` against the pre-written tests. Pyright caught a dict literal inferred as `int` instead of `Score`, so the mapping became a typed `MCQ_TO_SCORE` table.
 - **PC2.2:** the build plan's "check SSE through the Next rewrite" step paid off. The stream was measured live through `:3000` with a gzip-accepting client: 332 events arrived in **one burst at 13 s**. Without gzip, Next streamed fine (first event 1.5 s). The cause was Next's compression, not the proxy; `Cache-Control: no-transform` fixed it (ADR-0020). Live numbers: a lesson miss took 12.3 s and cost $0.019, with first text at 1.3 s. An exact hit took 0 ms and logged $0.019 / 12.3 s saved. Other findings:
   - **Redis 8 only indexes DB 0** (`Cannot create index on db != 0`), so tests can't build `idx:llm_exact` on DB 15 (ADR-0019).
@@ -16,6 +32,19 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
   - **Running pytest during a live check** wiped the live test-DB state (pytest recreates the DB and flushes DB 15), so the live setup had to be redone.
   - **A CP1 bug:** with `cacheComponents` on, Next 16 errors on `useParams()` outside `<Suspense>`. It was in CP1's course page too (the page still returned 200), and all three dynamic pages now wrap their client component in `<Suspense>`.
   - **Dependencies:** Kyle approved `mermaid` and `react-markdown`. Partial JSON parsing uses `pydantic_core.from_json`, so the backend has no new dependency.
+- **PC2.4, a prompt bug that only a live run showed:** the first live quiz's explain item said "apply it to the situation described", but the situation lived in `transfer_situation`, which the learner never sees. The 4-point rubric expected numbers (12 cores, 40 ms) the learner couldn't know, so a 4 was impossible. The fake-LLM tests passed. Fix: the skill now says the learner sees only `prompt` and options, every prompt is self-contained, and the rubric may only expect facts the prompt gives. Re-run live: the explain prompt carried every number.
+- **PC2.4, the AI's own test fixture was wrong:** a test retook a remediation quiz with an untargeted quiz, but the picked distractors had already logged beliefs, so the service correctly chose `design_targeted` and the fixture failed its validator. The test was fixed, not the code.
+- **Shell slip during live checks:** a zsh loop variable named `path` clobbered `PATH`, so a whole verification loop printed "command not found". Renamed and rerun; nothing else was affected.
+
+**Tradeoffs accepted**
+- Quiz design is slow (~20 s). It's prefetched after a fresh lesson, not streamed. The stored question set only appears whole.
+- The grader's misconception plus every picked distractor's belief are all logged, so a 0/4 attempt can log five beliefs. Noisy, but it gives targeting the most material; resolution tracking is P2.
+- Unlocks and completions aren't plan versions (ADR-0022).
+- The override warning is echoed back by the client (build plan, known follow-ups).
+
+**Kyle's ★:** PC2.1 and PC2.3/2.5 ★s were done by the AI at Kyle's request (time). Open: label the 8 grader answers before CP5.
+
+**How to verify:** `make up && make migrate && make seed && make test` (157 pass). Then `make dev`, log in as kyle, and follow "Test J2" in the PR description.
 
 ## CP1: Create a course (Sun 2026-10-11, PR #2)
 

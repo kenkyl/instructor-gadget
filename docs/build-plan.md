@@ -20,7 +20,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 |---|---|---|
 | CP0 | Foundations: repo, Postgres + Redis 8, FastAPI + Next.js wiring, CI, data model + migrations + seed, login + Redis sessions + dashboard cache, skill registry + `diagnose` scaffold | ✅ merged |
 | CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ✅ merged (PR #2) |
-| CP2 | J2: learn, check, adapt | ⏳ in progress (branch `cp2/learn-check-adapt`) |
+| CP2 | J2: learn, check, adapt | ✅ ready for review (PR #3) |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | |
 | CP4 | J3: org course grounded in docs | |
 | CP5 | Dashboard + eval harness | |
@@ -45,10 +45,10 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 |---|---|---|
 | PC2.1 | `agent/pedagogy.py` + tests: MCQ score, the lower-of-two combine rule, recency-weighted mastery (ADR-0005), bands, the unlock gate, `fsrs` scheduling (1–4 → Again/Hard/Good/Easy) | `update_mastery`, `band`, `mcq_score`/`combine` |
 | PC2.2 | `teach-concept` with SSE streaming (partial JSON → `field_delta` events), the exact-match cache (`llm:exact:*` native JSON + `idx:llm_exact`), Mermaid rendering. **Check that SSE streams through the Next rewrite**; if it buffers, call FastAPI directly for this endpoint. ✅ Checked live: Next's gzip buffered it, so the route sends `Cache-Control: no-transform` instead (ADR-0020). | — |
-| PC2.3 | Connection-pool simulator prototype in a sandboxed iframe (`srcdoc`, `sandbox="allow-scripts"`) | Find and explain its "surprise" threshold |
-| PC2.4 | `design-assessment` (4 MCQ + 1 short transfer item; answer keys stay server-side), `grade`, submit, misconception logging | — |
-| PC2.5 | Adaptation rules, `remediate`, plan versions + the diff UI | The `adapt` branch table |
-| PC2.6 | Prerequisite gate, override warning, test-out offer (ADR-0006). Draft 8 grader answers for Kyle to label. | Label the 8 answers (1–4) |
+| PC2.3 | Connection-pool simulator prototype in a sandboxed iframe (`srcdoc`, `sandbox="allow-scripts"`). ✅ Seeded by `make seed`; shown on matching lessons for hands-on learners | Find and explain its "surprise" threshold (done by the AI at Kyle's request) |
+| PC2.4 | `design-assessment` (4 MCQ + 1 short transfer item; answer keys stay server-side), `grade`, submit, misconception logging. ✅ Two quiz calls, shared vs targeted (ADR-0021) | — |
+| PC2.5 | Adaptation rules, `remediate`, plan versions + the diff UI. ✅ Remediation as an inserted prerequisite (ADR-0022) | The `adapt` branch table (done by the AI at Kyle's request) |
+| PC2.6 | Prerequisite gate, override warning, test-out offer (ADR-0006). Draft 8 grader answers for Kyle to label. ✅ `backend/evals/grader_calibration.yaml` | Label the 8 answers (1–4): still open, needed by CP5 |
 
 ## CP3: Redis deep dive
 | PC | Build | ★ Kyle |
@@ -95,3 +95,6 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - Data written back from Redis must be validated with Pydantic (`model_validate`), as in `auth.py` and `dashboard.py`.
 - A lesson stream the client abandons (navigates away) is cancelled and **not logged** in `llm_calls`: under anyio's level cancellation, the log write would need a shielded cancel scope. Add one if the trace page (PC3.3) needs abandoned calls.
 - SSE payload models (`FieldDeltaEvent`, `DoneEvent`) aren't in the OpenAPI schema, because the route yields `ServerSentEvent`. The web mirrors `FieldDeltaEvent` by hand in the lesson page.
+- The override's `warning` is echoed back by the client on confirm, so a client could log different text from what the server generated. Low stakes (it's the learner's own record); store the generated warning server-side if it matters.
+- The quiz is designed in ~20 s. The lesson page prefetches it after a fresh lesson; a click during the prefetch can trigger a second design call (the first stored attempt wins, so there's no duplicate, only the cost).
+- Submit holds no DB connection during the `grade` and `explain_change` calls (reads, release, model calls, then a row-locked write). The quiz-open path does the same.

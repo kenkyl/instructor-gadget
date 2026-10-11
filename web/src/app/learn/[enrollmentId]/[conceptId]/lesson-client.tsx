@@ -1,16 +1,19 @@
 "use client";
 
-// One lesson (spec §4.5): explanation → worked example → diagram. A stored lesson loads with a
-// GET; otherwise the POST streams it (SSE), field by field, as the model writes it.
+// One lesson (spec §4.5): explanation → worked example → diagram → prototype (hands-on only).
+// A stored lesson loads with a GET; otherwise the POST streams it (SSE), field by field, as the
+// model writes it. A locked concept (409) shows the override gate instead (spec §4.8).
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Markdown } from "@/components/markdown";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
+import { OverrideGate } from "@/components/override-gate";
+import { PrototypeFrame } from "@/components/prototype-frame";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ApiError, apiGet, type Schemas } from "@/lib/api";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
 import { postSse } from "@/lib/sse";
 
 type LessonView = Schemas["LessonView"];
@@ -25,6 +28,7 @@ export default function LessonPage() {
   const [fields, setFields] = useState<Fields>({});
   const [lesson, setLesson] = useState<LessonView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -51,6 +55,10 @@ export default function LessonPage() {
             setFields({}); // the first draft failed validation; a retry is streaming
           } else if (event === "done") {
             setLesson((data as { lesson: LessonView }).lesson);
+            // Design the quiz (~20 s) while the learner reads. The endpoint is get-or-create, so
+            // "Take the quiz" then opens this same attempt instantly. Only after a fresh lesson,
+            // so revisiting a finished concept doesn't start a new round.
+            apiPost(`/enrollments/${enrollmentId}/concepts/${conceptId}/quiz`).catch(() => {});
           } else if (event === "error") {
             setError((data as { message: string }).message);
           }
@@ -58,13 +66,32 @@ export default function LessonPage() {
         abort.signal,
       );
     })().catch((e: Error) => {
-      if (e.name !== "AbortError") setError(e.message);
+      if (e instanceof ApiError && e.status === 409) setLocked(true);
+      else if (e.name !== "AbortError") setError(e.message);
     });
     return () => abort.abort();
   }, [enrollmentId, conceptId, router, attempt]);
 
   const shown: Fields = lesson?.content ?? fields;
-  const streaming = lesson === null && error === null;
+  const streaming = lesson === null && error === null && !locked;
+
+  if (locked) {
+    return (
+      <main className="mx-auto max-w-2xl p-10 space-y-6">
+        <Link href={`/learn/${enrollmentId}`} className="text-muted-foreground text-sm hover:underline">
+          ← Plan
+        </Link>
+        <OverrideGate
+          enrollmentId={enrollmentId}
+          conceptId={conceptId}
+          onOpened={() => {
+            setLocked(false);
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-2xl p-10 space-y-8">
@@ -73,6 +100,7 @@ export default function LessonPage() {
           ← Plan
         </Link>
         {lesson && <Badge variant="outline">{lesson.cache_result.replace("_", " ")}</Badge>}
+        {lesson?.kind === "remediation" && <Badge>remediation</Badge>}
         {streaming && <span className="text-muted-foreground text-sm">Writing your lesson…</span>}
       </header>
 
@@ -110,10 +138,25 @@ export default function LessonPage() {
           )}
         </section>
       )}
+      {lesson?.prototype && (
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold">Try it: {lesson.prototype.title}</h2>
+          <p className="text-muted-foreground text-sm">
+            Change the knobs until something surprises you, then work out why.
+          </p>
+          <PrototypeFrame title={lesson.prototype.title} html={lesson.prototype.html} />
+        </section>
+      )}
       {lesson && (
-        <p className="text-muted-foreground text-sm">
-          The quiz for this concept arrives in the next build step: 4 questions, no hints.
-        </p>
+        <section className="space-y-2 border-t pt-6">
+          <p className="text-muted-foreground text-sm">
+            Next: 4 questions in situations the lesson didn&apos;t use, plus one to explain in your own
+            words. No hints; only your first answers count.
+          </p>
+          <Link href={`/learn/${enrollmentId}/${conceptId}/quiz`} className={buttonVariants()}>
+            Take the quiz →
+          </Link>
+        </section>
       )}
     </main>
   );

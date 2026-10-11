@@ -1,12 +1,14 @@
 """Deterministic pedagogy rules (CLAUDE.md: "skills do language; code does decisions").
 
 Pure functions, no I/O: scoring (spec §4.7), mastery and bands (§4.9), the unlock gate (§4.8)
-and FSRS review scheduling (§4.10). Services read state, call these, and write the results.
-Adaptation rules (the `adapt` branch table) land in PC2.5.
+FSRS review scheduling (§4.10) and the adaptation rules (§4.8). Services read state, call
+these, and write the results. The LLM never decides any of this; it only writes the "why" and
+the remediation content.
 """
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from fsrs import Card, Rating, Scheduler
@@ -14,7 +16,7 @@ from fsrs.card import CardDict
 from pydantic import TypeAdapter
 
 from agent.plan import Graph
-from agent.types import Band
+from agent.types import Band, Concept, ConceptMap, Misbelief, PlanDiff, PrereqChange, Remedy
 
 Score = Literal[1, 2, 3, 4]  # the 1–4 rubric (spec §4.7)
 
@@ -41,6 +43,11 @@ RATING: dict[Score, Rating] = {
 }
 # Day-scale scheduling: no minute-scale learning steps, no fuzz (ADR-0018).
 SCHEDULER = Scheduler(learning_steps=(), relearning_steps=(), enable_fuzzing=False)
+
+# Remediation concepts per concept before the rules stop inserting more and ask for a retake
+# instead (no endless remediation loops).
+MAX_REMEDIATIONS = 2
+REMEDY_MINUTES = 10
 
 _BAND_ORDER = [Band.shaky, Band.learning, Band.solid, Band.mastered]
 _card_dict = TypeAdapter(CardDict)
@@ -132,3 +139,88 @@ def schedule_review(card: Card | None, score: Score, at: datetime) -> Card:
 def load_card(data: Any) -> Card:
     """Validate a stored concept_progress.fsrs_card (JSONB) and rebuild the Card."""
     return Card.from_dict(_card_dict.validate_python(data))
+
+
+# --- Adaptation (§4.8): the `adapt` branch table ---------------------------------------------
+class Rule(StrEnum):
+    """Which rule fired after a graded attempt. Stored in plan_versions.rule when it changes the
+    plan (insert_remediation, offer_test_out once accepted)."""
+
+    offer_test_out = "offer_test_out"  # a 4 (and solid+): offer to test out of the next concept
+    advance = "advance"  # solid or better: continue; dependents unlock
+    retake = "retake"  # a 3 (or 4) that isn't solid yet: take the quiz again, no remediation
+    insert_remediation = "insert_remediation"  # 1–2: re-teach from a different angle
+
+
+def adapt(score: Score, new_band: Band, remediations: int) -> Rule:
+    """The plan change after a graded attempt. Keyed on the **score**; the band (from mastery)
+    decides whether the concept is done (spec §4.8, ADR-0005).
+
+    `remediations` is how many remediation concepts this concept already has. Past
+    MAX_REMEDIATIONS a low score asks for a retake instead of inserting yet another one.
+    """
+    if score <= 2:
+        return Rule.insert_remediation if remediations < MAX_REMEDIATIONS else Rule.retake
+    if not at_least(new_band, UNLOCK_BAND):
+        return Rule.retake  # e.g. a 3 after a 1: mastery 0.62, one more attempt (§4.9)
+    return Rule.offer_test_out if score == 4 else Rule.advance
+
+
+def remediation_id(concept_id: str, n: int) -> str:
+    suffix = f"-remedy-{n}"
+    return concept_id[: 64 - len(suffix)].rstrip("-") + suffix
+
+
+def remediation_count(cmap: ConceptMap, concept_id: str) -> int:
+    return sum(1 for c in cmap.concepts if c.remedy and c.remedy.for_concept == concept_id)
+
+
+def insert_remediation(
+    cmap: ConceptMap,
+    concept_id: str,
+    *,
+    title: str,
+    mastery_statement: str,
+    angle: str,
+    misconception: Misbelief | None,
+) -> tuple[ConceptMap, PlanDiff]:
+    """The plan with a remediation concept inserted before `concept_id`, which now requires it.
+
+    The remedy takes the original's prereqs, so it unlocks now, and the original re-locks until
+    the remedy is solid; then the learner retakes the original's quiz.
+    """
+    original = cmap.concept(concept_id)
+    if original is None:
+        raise ValueError(f"unknown concept {concept_id}")
+    remedy = Concept(
+        id=remediation_id(concept_id, remediation_count(cmap, concept_id) + 1),
+        title=title,
+        mastery_statement=mastery_statement,
+        objective_level=original.objective_level,
+        prereqs=list(original.prereqs),
+        est_minutes=REMEDY_MINUTES,
+        concept_type=original.concept_type,
+        remedy=Remedy(for_concept=concept_id, angle=angle, misconception=misconception),
+    )
+    concepts: list[Concept] = []
+    for c in cmap.concepts:
+        if c.id == concept_id:
+            concepts += [remedy, c.model_copy(update={"prereqs": [*c.prereqs, remedy.id]})]
+        else:
+            concepts.append(c)
+    i = cmap.sequence.index(concept_id)
+    new = ConceptMap(
+        concepts=concepts,
+        sequence=[*cmap.sequence[:i], remedy.id, *cmap.sequence[i:]],
+        sequence_rationale=cmap.sequence_rationale,
+        test_out=cmap.test_out,
+    )
+    diff = PlanDiff(
+        added=[remedy], prereq_changes=[PrereqChange(concept_id=concept_id, added=[remedy.id])]
+    )
+    return new, diff
+
+
+def course_complete(bands: Mapping[str, Band | None]) -> bool:
+    """Every concept in the plan (remediations included) is solid or better (spec J2 step 7)."""
+    return all(at_least(b, UNLOCK_BAND) for b in bands.values())

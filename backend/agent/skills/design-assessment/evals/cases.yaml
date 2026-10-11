@@ -1,0 +1,33 @@
+# Eval cases for design-assessment. Run by `make evals` (CP5); these need the live model.
+# Shape rules (4 MCQs, one correct option per question, objective level present, a targeted
+# question when misconceptions are given) are also enforced by QuizOutput validators.
+
+design:
+  - id: transfer-not-recall
+    input:
+      topic: "Database connection pooling"
+      target_level: intermediate
+      round: 1
+      concept: { id: pool-exhaustion, title: Pool exhaustion, objective_level: analyze,
+                 mastery_statement: "You can diagnose why requests time out when a pool is exhausted",
+                 prereqs: [], est_minutes: 20, concept_type: systems }
+      lesson: { explanation_md: "(fixture: restaurant-table analogy, 10-connection pool)",
+                example_md: "(fixture: checkout service at 180 req/s)" }
+    assert:
+      - "no question reuses the lesson's restaurant or checkout situation (LLM judge)"
+      - "every distractor is a belief a half-learner would hold (LLM judge)"
+
+design_targeted:
+  - id: targets-logged-belief
+    input:
+      topic: "Database connection pooling"
+      target_level: intermediate
+      round: 2
+      concept: { id: pool-exhaustion, title: Pool exhaustion, objective_level: analyze,
+                 mastery_statement: "You can diagnose why requests time out when a pool is exhausted",
+                 prereqs: [], est_minutes: 20, concept_type: systems }
+      lesson: null
+      misconceptions:
+        - { label: "bigger pool always helps", note: "Believes adding connections always lowers latency, ignoring the database's own limit." }
+    assert:
+      - "any(q.targets_logged_misconception == 'bigger pool always helps' for q in output.questions)"

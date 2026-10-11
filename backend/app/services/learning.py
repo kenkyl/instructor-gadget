@@ -17,7 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agent.llm import CallContext, Done, LLMClient, Restart, TextDelta
 from agent.partial import FieldDeltas
-from agent.types import Band, ConceptMap, CourseConfig, LessonOutput, Mission, TeachInput
+from agent.types import (
+    Band,
+    ConceptMap,
+    CourseConfig,
+    LessonOutput,
+    Mission,
+    RemediationLessonInput,
+    TeachInput,
+)
 from app.auth import CurrentUser
 from app.models import (
     CacheResult,
@@ -25,11 +33,14 @@ from app.models import (
     ConceptStatus,
     Course,
     Enrollment,
+    EnrollmentStatus,
     Lesson,
     LessonKind,
     PlanVersion,
+    PrereqOverride,
 )
 from app.services.dashboard import invalidate_dashboard
+from app.services.prototypes import PrototypeView, prototype_for, prototype_view
 
 # The LessonOutput string fields streamed to the learner, in the order the model writes them.
 STREAMED_FIELDS = ("explanation_md", "example_md", "diagram_mermaid")
@@ -37,16 +48,24 @@ STREAMED_FIELDS = ("explanation_md", "example_md", "diagram_mermaid")
 
 class ProgressView(BaseModel):
     concept_id: str
+    kind: LessonKind  # remediation concepts are inserted by the adapt rules (PC2.5)
     status: ConceptStatus
     mastery: float | None
     band: Band | None
+    last_score: int | None
+    attempts: int
     due: datetime | None
+    has_lesson: bool
+    test_out: bool  # the learner chose to skip the lesson and go straight to the quiz
+    overridden: bool  # opened past the prerequisite gate (PC2.6)
 
 
 class EnrollmentDetail(BaseModel):
     id: uuid.UUID
     course_id: uuid.UUID
     title: str
+    status: EnrollmentStatus
+    completed_at: datetime | None
     plan_version: int
     concept_map: ConceptMap
     progress: list[ProgressView]  # in the plan's sequence order
@@ -57,6 +76,7 @@ class LessonView(BaseModel):
     kind: LessonKind
     content: LessonOutput
     cache_result: CacheResult
+    prototype: PrototypeView | None = None
 
 
 # --- events the lesson stream yields (the router maps them to SSE) ----------------------------
@@ -87,7 +107,10 @@ class LessonJob:
     enrollment_id: uuid.UUID
     concept_id: str
     plan_version: int
-    payload: TeachInput
+    kind: LessonKind
+    # core: teach-concept.teach (shareable, cached); remediation: remediate.lesson (never cached)
+    payload: TeachInput | RemediationLessonInput
+    prototype_id: uuid.UUID | None
 
 
 async def get_owned_enrollment(
@@ -112,29 +135,54 @@ async def current_plan(db: AsyncSession, enrollment: Enrollment) -> ConceptMap:
     return ConceptMap.model_validate(plan)  # JSONB: validate on the way out
 
 
+async def progress_rows(db: AsyncSession, enrollment_id: uuid.UUID) -> dict[str, ConceptProgress]:
+    rows = await db.scalars(
+        select(ConceptProgress).where(ConceptProgress.enrollment_id == enrollment_id)
+    )
+    return {p.concept_id: p for p in rows}
+
+
+async def overridden_concepts(db: AsyncSession, enrollment_id: uuid.UUID) -> set[str]:
+    rows = await db.scalars(
+        select(PrereqOverride.concept_id).where(PrereqOverride.enrollment_id == enrollment_id)
+    )
+    return set(rows)
+
+
+async def lessoned_concepts(db: AsyncSession, enrollment_id: uuid.UUID) -> set[str]:
+    rows = await db.scalars(select(Lesson.concept_id).where(Lesson.enrollment_id == enrollment_id))
+    return set(rows)
+
+
 async def enrollment_detail(db: AsyncSession, enrollment: Enrollment) -> EnrollmentDetail:
     course = await db.get(Course, enrollment.course_id)
     assert course is not None
     cmap = await current_plan(db, enrollment)
-    rows = {
-        p.concept_id: p
-        for p in await db.scalars(
-            select(ConceptProgress).where(ConceptProgress.enrollment_id == enrollment.id)
-        )
-    }
+    rows = await progress_rows(db, enrollment.id)
+    lessoned = await lessoned_concepts(db, enrollment.id)
+    overridden = await overridden_concepts(db, enrollment.id)
+    concepts = {c.id: c for c in cmap.concepts}
     return EnrollmentDetail(
         id=enrollment.id,
         course_id=course.id,
         title=course.title,
+        status=enrollment.status,
+        completed_at=enrollment.completed_at,
         plan_version=enrollment.current_plan_version,
         concept_map=cmap,
         progress=[
             ProgressView(
                 concept_id=cid,
+                kind=LessonKind.remediation if concepts[cid].is_remediation else LessonKind.core,
                 status=rows[cid].status,
                 mastery=rows[cid].mastery,
                 band=rows[cid].band,
+                last_score=rows[cid].last_score,
+                attempts=rows[cid].attempts,
                 due=rows[cid].due,
+                has_lesson=cid in lessoned,
+                test_out=cid in cmap.test_out,
+                overridden=cid in overridden,
             )
             for cid in cmap.sequence
             if cid in rows
@@ -147,11 +195,7 @@ async def latest_lesson(
 ) -> LessonView | None:
     lesson = await db.scalar(
         select(Lesson)
-        .where(
-            Lesson.enrollment_id == enrollment_id,
-            Lesson.concept_id == concept_id,
-            Lesson.kind == LessonKind.core,
-        )
+        .where(Lesson.enrollment_id == enrollment_id, Lesson.concept_id == concept_id)
         .order_by(Lesson.created_at.desc())
         .limit(1)
     )
@@ -162,6 +206,7 @@ async def latest_lesson(
         kind=lesson.kind,
         content=LessonOutput.model_validate(lesson.content),
         cache_result=lesson.cache_result,
+        prototype=await prototype_view(db, lesson.prototype_id),
     )
 
 
@@ -178,7 +223,7 @@ async def prepare_lesson(
         raise HTTPException(404, "concept not in your plan")
     progress = await db.get(ConceptProgress, (enrollment.id, concept_id))
     if progress is None or progress.status == ConceptStatus.locked:
-        # The override (open anyway, with a warning) arrives in PC2.6.
+        # The learner can open it anyway after a specific warning: POST …/override (PC2.6).
         raise HTTPException(409, "This concept is locked until its prerequisites are solid.")
 
     existing = await latest_lesson(db, enrollment.id, concept_id)
@@ -188,20 +233,38 @@ async def prepare_lesson(
     course = await db.get(Course, enrollment.course_id)
     assert course is not None
     config = CourseConfig.model_validate(course.config)
+    analogy = Mission.model_validate(course.mission).analogy_domain
+    if concept.remedy is not None:
+        original = concepts.get(concept.remedy.for_concept)
+        first = await latest_lesson(db, enrollment.id, concept.remedy.for_concept)
+        payload: TeachInput | RemediationLessonInput = RemediationLessonInput(
+            topic=config.topic,
+            target_level=config.target_level,
+            analogy_domain=analogy,
+            concept=concept,
+            original_concept_title=original.title if original else concept.remedy.for_concept,
+            original_explanation=first.content.explanation_md if first else None,
+        )
+        kind = LessonKind.remediation
+    else:
+        payload = TeachInput(
+            topic=config.topic,
+            target_level=config.target_level,
+            analogy_domain=analogy,
+            formats=sorted(config.formats),
+            concept=concept,
+            prereq_titles=[concepts[p].title for p in concept.prereqs if p in concepts],
+        )
+        kind = LessonKind.core
     return LessonJob(
         user_id=user.id,
         course_id=course.id,
         enrollment_id=enrollment.id,
         concept_id=concept_id,
         plan_version=enrollment.current_plan_version,
-        payload=TeachInput(
-            topic=config.topic,
-            target_level=config.target_level,
-            analogy_domain=Mission.model_validate(course.mission).analogy_domain,
-            formats=sorted(config.formats),
-            concept=concept,
-            prereq_titles=[concepts[p].title for p in concept.prereqs if p in concepts],
-        ),
+        kind=kind,
+        payload=payload,
+        prototype_id=await prototype_for(db, concept, config.formats),
     )
 
 
@@ -214,7 +277,11 @@ async def stream_lesson(
     """Generate the lesson, yielding field deltas as the model writes, then store it."""
     deltas = FieldDeltas(STREAMED_FIELDS)
     ctx = CallContext(user_id=job.user_id, course_id=job.course_id, enrollment_id=job.enrollment_id)
-    async for event in llm.stream("teach-concept", "teach", job.payload, LessonOutput, ctx=ctx):
+    if isinstance(job.payload, TeachInput):
+        events = llm.stream("teach-concept", "teach", job.payload, LessonOutput, ctx=ctx)
+    else:
+        events = llm.stream("remediate", "lesson", job.payload, LessonOutput, ctx=ctx)
+    async for event in events:
         match event:
             case TextDelta(text=text):
                 for d in deltas.feed(text):
@@ -248,8 +315,9 @@ async def _store_lesson(
                 enrollment_id=job.enrollment_id,
                 concept_id=job.concept_id,
                 plan_version=job.plan_version,
-                kind=LessonKind.core,
+                kind=job.kind,
                 content=output.model_dump(mode="json"),
+                prototype_id=job.prototype_id,
                 cache_result=cache_result,
                 cache_key=cache_key,
             )
@@ -258,7 +326,12 @@ async def _store_lesson(
         if progress is not None and progress.status == ConceptStatus.unlocked:
             progress.status = ConceptStatus.in_progress
         await db.commit()
+        prototype = await prototype_view(db, job.prototype_id)
     await invalidate_dashboard(redis, job.user_id)  # progress changed (after the commit)
     return LessonView(
-        concept_id=job.concept_id, kind=LessonKind.core, content=output, cache_result=cache_result
+        concept_id=job.concept_id,
+        kind=job.kind,
+        content=output,
+        cache_result=cache_result,
+        prototype=prototype,
     )

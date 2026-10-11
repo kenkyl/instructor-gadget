@@ -64,9 +64,10 @@ export function Dashboard() {
             <Card key={c.enrollment_id}>
               <CardHeader>
                 <CardTitle>
-                  <Link href={`/courses/${c.course_id}`} className="hover:underline">
+                  <Link href={`/learn/${c.enrollment_id}`} className="hover:underline">
                     {c.title}
                   </Link>
+                  {c.status === "complete" && " 🎓"}
                 </CardTitle>
                 <CardDescription>
                   {c.scope === "org" ? `Org course · ${c.org_name}` : "Personal course"} ·{" "}
