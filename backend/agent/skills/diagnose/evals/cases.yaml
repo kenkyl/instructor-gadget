@@ -1,5 +1,6 @@
 # Eval cases for diagnose. Run by `make evals` (CP5); these need the live model.
-# The cross-cutting diagnosis-accuracy eval (4 personas x 3 runs) lives in backend/evals/.
+# `make evals` runs each assess case 3x as a diagnosis persona (build brief §6.1): within one level
+# of `expected_level`, an adjustment message when it re-levels, and consistency across runs.
 
 probe:
   - id: probe-shape-intermediate
@@ -15,6 +16,7 @@ probe:
 
 assess:
   - id: over-claimer-gets-adjusted
+    expected_level: novice
     note: Claims intermediate, answers like a novice. Must be re-levelled with an explanation.
     input:
       config: { topic: "Incident investigation for on-call engineers", self_level: intermediate,
@@ -39,6 +41,7 @@ assess:
       - "len(output.gaps) >= 2"
 
   - id: answer-injection-is-ignored
+    expected_level: novice
     note: An answer that asks for a level is not evidence of it (assess.md).
     input:
       config: { topic: "Incident investigation for on-call engineers", self_level: expert,
@@ -62,6 +65,7 @@ assess:
       - "output.adjustment_message is not None"
 
   - id: under-claimer-gets-raised
+    expected_level: intermediate
     note: Claims novice, answers like an intermediate. The level can go up, with an explanation.
     input:
       config: { topic: "Incident investigation for on-call engineers", self_level: novice,
@@ -83,3 +87,27 @@ assess:
     assert:
       - "output.assessed_level in ('intermediate', 'strong')"
       - "output.adjustment_message is not None"
+
+  - id: accurate-claimer-stays
+    expected_level: intermediate
+    note: Claims intermediate and answers like one. No re-levelling, so no adjustment message.
+    input:
+      config: { topic: "Incident investigation for on-call engineers", self_level: intermediate,
+                target_level: intermediate, target_hours: 3 }
+      mission: { goal: "Be ready for my first on-call rotation",
+                 expert_means: "I can lead an incident without escalating for basics" }
+      probe:
+        questions:
+          - { id: q1, prompt: "A service's p99 latency doubles but CPU is flat. What do you check first, and why?",
+              targets_concept: "saturation vs. utilization", level: intermediate }
+          - { id: q2, prompt: "What's the difference between a liveness and a readiness probe failing?",
+              targets_concept: "Kubernetes probes", level: intermediate }
+          - { id: q3, prompt: "Why might adding more app replicas make a database connection problem worse?",
+              targets_concept: "connection pools", level: intermediate }
+      answers:
+        - { question_id: q1, answer: "Flat CPU means it's probably waiting, not computing: I'd check saturation of what it waits on, like the DB connection pool, thread pool or a slow downstream, and look at queue depth or wait time." }
+        - { question_id: q2, answer: "Liveness failing gets the container restarted; readiness failing takes the pod out of the Service's endpoints so it stops getting traffic, without a restart." }
+        - { question_id: q3, answer: "Each replica brings its own pool, so total connections grow with replicas and can hit the database's connection limit; then new connections fail or the DB thrashes." }
+    assert:
+      - "output.assessed_level == 'intermediate'"
+      - "output.adjustment_message is None"

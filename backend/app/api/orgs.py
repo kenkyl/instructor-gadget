@@ -4,7 +4,8 @@ from fastapi import APIRouter, Response
 
 from app.auth import CurrentUserDep
 from app.deps import Db
-from app.services import org_docs
+from app.services import courses, org_docs
+from app.services.courses import OrgCourseSummary
 from app.services.org_docs import OrgDocDetail, OrgDocIn, OrgDocSummary, OrgMembershipOut
 from app.services.trace import OrgImpactResponse, get_org_impact
 
@@ -43,3 +44,10 @@ async def impact(org_slug: str, user: CurrentUserDep, db: Db) -> OrgImpactRespon
     """What the cache did across the org's courses: calls, hit rate, $ spent and saved, per course
     and per learner (admins only; counts and dollars, never excerpts)."""
     return await get_org_impact(db, user, org_slug)
+
+
+@router.get("/{org_slug}/courses")
+async def org_courses(org_slug: str, user: CurrentUserDep, db: Db) -> list[OrgCourseSummary]:
+    """The org's courses, drafts and templates included, with doc and learner counts (admins
+    only). The admin's way back to a template, which isn't on their dashboard."""
+    return await courses.list_org_courses(db, user, org_slug)

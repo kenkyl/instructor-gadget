@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install models up down nuke doctor logs psql redis-cli migrate migration seed api web dev test eval-cache eval-grounding lint fmt types
+.PHONY: help install models up down nuke doctor logs psql redis-cli migrate migration seed api web dev test evals eval-cache eval-grounding lint fmt types
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -58,6 +58,9 @@ dev: ## Run api + web together (Ctrl-C stops both)
 # --- quality -----------------------------------------------------------------
 test: ## Backend tests against a throwaway instructor_test DB (needs `make up`)
 	cd backend && uv run pytest -q
+
+evals: ## Live: the mini eval harness (personas, maps, pedagogy, grader calibration, grounding judge, cache false hits; ~$1, needs ANTHROPIC_API_KEY + `make up`)
+	cd backend && uv run python -m evals.run_evals
 
 eval-cache: ## Semantic-cache threshold sweep + intake-guard re-check on the real MiniLM model (needs `make up`)
 	cd backend && uv run python -m evals.cache_eval

@@ -3,6 +3,7 @@
 // The org admin's cache impact view (ADR-0030): the learner's trace tile over every learner's
 // calls on the org's courses. Counts and dollars only, no prompt or response text (ADR-0027):
 // the first learner to open a lesson pays to generate it, and the ones after them reuse it.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -103,7 +104,12 @@ export default function OrgImpactPage() {
                 key={c.course_id}
                 className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-3 text-sm"
               >
-                <span className="text-strong">{c.title}</span>
+                <Link
+                  href={`/courses/${c.course_id}`}
+                  className="text-strong hover:underline hover:underline-offset-4"
+                >
+                  {c.title}
+                </Link>
                 <span className="text-muted-foreground flex flex-wrap gap-x-5">
                   <span>
                     <span className="num text-foreground">{c.learners}</span>{" "}

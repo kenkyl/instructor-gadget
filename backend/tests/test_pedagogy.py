@@ -15,10 +15,12 @@ from agent.pedagogy import (
     Score,
     adapt,
     band,
+    band_counts,
     combine,
     course_complete,
     initially_unlocked,
     insert_remediation,
+    is_due,
     load_card,
     mcq_score,
     remediation_count,
@@ -239,3 +241,17 @@ def test_course_complete_needs_every_concept_solid() -> None:
     assert course_complete({"a": Band.solid, "b": Band.mastered})
     assert not course_complete({"a": Band.solid, "b": Band.learning})
     assert not course_complete({"a": Band.solid, "b": None})
+
+
+def test_band_counts_separate_not_started_from_shaky() -> None:
+    counts = band_counts([None, Band.shaky, Band.solid, Band.solid, Band.mastered, None])
+    assert counts == {"not_started": 2, "shaky": 1, "learning": 0, "solid": 2, "mastered": 1}
+    assert list(counts) == ["not_started", "shaky", "learning", "solid", "mastered"]
+    assert sum(band_counts([]).values()) == 0
+
+
+def test_only_a_scheduled_past_date_is_due() -> None:
+    now = datetime(2026, 10, 12, tzinfo=UTC)
+    assert is_due(now, now) and is_due(now - timedelta(days=1), now)
+    assert not is_due(now + timedelta(seconds=1), now)
+    assert not is_due(None, now)  # never quizzed: no card, not due

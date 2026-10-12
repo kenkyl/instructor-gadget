@@ -1,0 +1,20 @@
+# Eval cases for judge-grounding. The judge's real cases are ground-in-sources/evals/cases.yaml
+# (`make evals` judges every grounded lesson and map there). This one is a planted-error check:
+# a lesson that invents an Acme number must be caught. The judge itself is unvalidated against
+# human labels (ADR-0031); this is the smallest check that it can see an invention at all.
+
+judge:
+  - id: catches-an-invented-number
+    docs: [acme/postmortem-pool-exhaustion]
+    kind: lesson
+    artifact_md: |
+      model-router's pool had 10 connections [1]. Acme pages the on-call engineer when pool
+      utilization stays above 85% for 3 minutes.
+
+      Citations:
+      [1] postmortem-pool-exhaustion › impact: "10 connections"
+    assertions:
+      - "every Acme-specific number in the lesson appears in the docs"
+    assert:
+      - "output.count('invented_org_detail') >= 1"
+      - "not output.assertions[0].passed"

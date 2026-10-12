@@ -393,3 +393,19 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Grounded lesson and quiz prompt versions changed once (the mode joined the hash), so dev caches from PC4.2 simply miss. Personal versions are unchanged.
 - Admins see usage per learner (calls, hit rate, dollars), never content.
 **One-liner:** The admin builds the course once from the docs, assigning gives each learner their own copy of the plan, and the admin sees what the cache saved without seeing anything a learner wrote.
+
+## ADR-0031: `make evals`: live checks through the production wrapper, and an unvalidated grounding judge as a product skill
+**Context:** The build brief (§6) asks for a small, honest eval harness: diagnosis personas, map constraints, pedagogy rules, grader calibration against human labels, an LLM-as-judge for grounding, and the semantic cache's false-hit rate. The deterministic `make test` must never call the API, and CLAUDE.md requires every LLM call to go through the wrapper.
+**Decision:**
+- `make evals` (`backend/evals/run_evals.py`) runs every model call through `LLMClient` (structured output, validation, one retry) with **no cache tier**, so it measures fresh generations; 4 calls at a time, and it stops scheduling calls past a $5 budget. Each skill's `evals/cases.yaml` Python-expression asserts are checked by code; the "(LLM judge)" ones go to the judge.
+- The judge is a product skill, `judge-grounding` (`cache: never`), so its prompt is versioned and logged like any other. It lists every org-specific claim with one verdict (`cited_supported`, `cited_unsupported`, `uncited_from_docs`, `general_knowledge`, `invented_org_detail`) and scores the case's reader-only assertions. A planted-invention case checks that it can catch one at all.
+- The grader is calibrated against Kyle's 8 labels (3 runs each): exact and within-one agreement, consistency, and whether a fluent restatement ever got a 4.
+**Alternatives:**
+- Calling the SDK directly from the harness: faster to write, but it would bypass the wrapper's validation and retry, so the eval would measure something other than production.
+- Reading cached outputs: cheaper, but it re-measures yesterday's generation.
+- Judging with a different, stronger model: possible later; the same model keeps one variable at a time.
+**Consequences:**
+- **The judge itself is unvalidated against human labels.** Its numbers are a smoke alarm, not a measurement; the planted case only shows it can see an invention. Validating it needs hand-labelled claims (the same shape as the grader calibration set).
+- First run (2026-10-12, Sonnet 5.5, $0.58, 47 requests, 69 s): diagnosis within one level 12/12, consistent 3/4 personas; maps valid 3/3; grader exact 13/24, within one 24/24, restatements never scored 4; judge 8/9 assertions, 0 invented org details; cache false hits 0/15 at 0.12. Every grader disagreement is the grader scoring **lower** than the label, as its "when in doubt, the lower" rule intends; whether the labels or the item rubric should move is Kyle's call, not a prompt tweak to fit 8 answers.
+- A full run costs about $0.60; it isn't in CI.
+**One-liner:** `make evals` measures fresh generations through the same wrapper production uses, and its grounding judge is a versioned skill whose own accuracy is still unproven.
