@@ -7,7 +7,8 @@ set of TAG fields filtered *before* the vector search, so a lesson can never be 
 orgs or to a learner with different preferences, however close the vectors are.
 
 The threshold is cosine distance (0 = identical, 2 = opposite). A false hit is worse than a
-miss (it teaches the wrong concept), so the default is strict until the PC3.2 eval chooses it.
+miss (it teaches the wrong concept), so the default is strict: chosen by the PC3.2 eval
+(`make eval-cache`, ADR-0026), below the closest pair of sibling concepts in one course.
 
 Like the exact tier, a failure never fails the call: Redis errors are a miss or a skipped write.
 """
@@ -31,7 +32,7 @@ log = logging.getLogger(__name__)
 INDEX_NAME = "idx:llm_semantic"  # RedisVL also uses it as the key prefix: idx:llm_semantic:{id}
 MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # 384 dims, runs locally on CPU
 TTL_SECONDS = 7 * 24 * 60 * 60
-DEFAULT_DISTANCE_THRESHOLD = 0.15  # provisional: PC3.2's eval picks the real default
+DEFAULT_DISTANCE_THRESHOLD = 0.12  # ADR-0026: siblings start at 0.156; keep a margin below them
 
 # The bucket: every field a hit must match exactly (ADR-0007).
 BUCKET_FIELDS = (

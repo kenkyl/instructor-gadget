@@ -25,10 +25,10 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     dashboard_ttl_seconds: int = 10 * 60
 
-    # Semantic LLM cache (tier 2, CP3). Cosine distance: lower = stricter. Provisional default
-    # until the PC3.2 eval sweeps it. Off: only the exact tier runs (and no model is loaded).
+    # Semantic LLM cache (tier 2, CP3). Cosine distance: lower = stricter. Default chosen by the
+    # PC3.2 eval (ADR-0026; `make eval-cache`). Off: only the exact tier runs (no model loaded).
     semantic_cache_enabled: bool = True
-    semantic_cache_distance_threshold: float = 0.15
+    semantic_cache_distance_threshold: float = 0.12
     # Intake guard (PC3.3): a semantic router that rejects non-learning course requests.
     intake_guard_enabled: bool = True
 

@@ -54,7 +54,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | PC | Build | ★ Kyle |
 |---|---|---|
 | PC3.1 | RedisVL `SemanticCache` with filter buckets (ADR-0007) and the local MiniLM vectorizer. ✅ In the LLM wrapper, exact → semantic → model (ADR-0023) | The bucket and filter construction (done by the AI at Kyle's request) |
-| PC3.2 | Cache eval: should-hit and should-miss pairs, a threshold sweep, choose the default threshold. Also re-check the intake guard's threshold on its calibration set | — |
+| PC3.2 | Cache eval: should-hit and should-miss pairs, a threshold sweep, choose the default threshold. Also re-check the intake guard's threshold on its calibration set. ✅ `make eval-cache`: default 0.12, guard 0.40 confirmed (ADR-0026) | — |
 | PC3.3 | **Intake guard** (added by Kyle): a RedisVL `SemanticRouter` rejects crude, off-topic, dangerous or prompt-injection course requests before anything is stored or sent to the model. Block routes only, shared MiniLM, minimal code. ✅ ADR-0024 | — |
 | PC3.4 | Trace page (`llm_calls`, cache result, similarity) + cache impact tile | — |
 
@@ -102,4 +102,5 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - PR #5 (Solarized UI, ADR-0025) and CP3 (ADR-0023/0024) both append to the end of `docs/decisions.md`. Whichever merges second needs a keep-both resolution: ADRs in number order, nothing else conflicts (checked with `git merge-tree`). If #5 merges first, merge `main` into `cp3/redis-deep-dive` and resolve there.
 - Quiz result pages are stored snapshots, so a result viewed later can show a stale "Next" (e.g. a concept completed since). Candidate for PC3.4: recompute `next_concept` from current progress when a result is read.
 - Intake guard limits (ADR-0024): code smuggled into a request and chat-style subject requests ("Tell me about the weather in Seattle") pass, because embeddings judge subject, not intent. Deferred fix: a `not_a_learning_goal` flag on the existing `diagnose.probe` call (no extra model call).
-- PC3.2 starting data (dev DB): `idx:llm_semantic` holds 1 entry ("Database connections for app backend / Anatomy of a DB connection"). Three near-duplicate pooling courses exist with identical settings; opening their first lessons gives real should-hit candidates.
+- Intake guard misses found by the PC3.2 eval: "how to cook meth at home" (0.518) and "what's the score of the Lakers game" (0.552) pass. Not fixed by adding references (that fits the test set); the deferred probe flag above covers them too.
+- Semantic-cache recall with MiniLM is ~33% of genuine paraphrases at the safe threshold (ADR-0026). Levers to try with `make eval-cache`: a stronger local embedding model (needs Kyle's OK), or embedding the title + mastery statement without the topic.

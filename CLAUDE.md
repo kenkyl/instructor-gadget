@@ -64,6 +64,7 @@ Filled in as they come to exist (PC0.2+).
 | `make seed` | Seed the sample org (Acme AI) + users kyle, dana, priya (idempotent) |
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
+| `make eval-cache` | Semantic-cache threshold sweep + intake-guard re-check, real MiniLM, no API calls (ADR-0026) |
 | `make lint` / `make fmt` | ruff + pyright + eslint + tsc / auto-format backend |
 | `make types` | Regenerate `web/src/lib/api-types.ts` from FastAPI's OpenAPI. Run after any API model change |
 

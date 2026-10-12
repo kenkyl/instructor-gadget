@@ -867,7 +867,7 @@ RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `idx:llm_semantic:{e
 | `response` | The validated `LessonOutput` JSON |
 | `metadata` | `{cost_usd, latency_ms, created_at}`: what generating it cost, so a hit can log what it saved |
 | Filter TAGs (the "bucket") | `skill_call`, `model`, `prompt_version`, `org_id` (or `public`), `target_level`, `formats_key` (sorted, `+`-joined), `analogy_key` (slugged or `none`), `doc_set_hash` (or `none`). All must match before the vector search |
-| Threshold | `SEMANTIC_CACHE_DISTANCE_THRESHOLD` (cosine distance), provisional 0.15; PC3.2's eval chooses the default. `SEMANTIC_CACHE_ENABLED=false` turns the tier off |
+| Threshold | `SEMANTIC_CACHE_DISTANCE_THRESHOLD` (cosine distance), default 0.12, chosen by the PC3.2 eval (`make eval-cache`, ADR-0026; it builds throwaway `test:idx:llm_semantic:eval-*` and `test:idx:intake_guard:eval-*` indexes on DB 0 and drops them). `SEMANTIC_CACHE_ENABLED=false` turns the tier off |
 | Read | Every `semantic`-policy call (today: `teach-concept.teach` for core lessons) after an exact miss. A hit sets `lessons.cache_result = semantic_hit` and `cache_key` = the entry's Redis key; `llm_calls` gets `similarity` (1 − distance) and the saved cost/latency |
 | Write | On a miss, after the output validates (alongside the exact entry) |
 

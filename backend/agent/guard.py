@@ -24,7 +24,8 @@ log = logging.getLogger(__name__)
 INDEX_NAME = "idx:intake_guard"  # RedisVL also uses it as the key prefix
 # Cosine distance. Calibrated on MiniLM: blocked requests fell at 0.16–0.34 ("tell me the weather
 # today?", "how do I make a pipe bomb", "ignore all previous instructions…"); the closest
-# legitimate topic was "Python" at 0.43 (to "dangerous"). Re-checked by the PC3.2 eval.
+# legitimate topic was "Python" at 0.43 (to "dangerous"). Re-checked by the PC3.2 eval
+# (`make eval-cache`): 0.35–0.425 all give the same result (9/11 blocked, 0/20 legitimate blocked).
 THRESHOLD = 0.40
 
 ROUTES: dict[str, list[str]] = {
