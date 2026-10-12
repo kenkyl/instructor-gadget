@@ -1933,19 +1933,28 @@
         "properties": {
           "doc": {
             "type": "string",
-            "title": "Doc"
+            "title": "Doc",
+            "description": "The doc's slug, from <document slug=\u2026>"
           },
           "section": {
             "type": "string",
-            "title": "Section"
+            "title": "Section",
+            "description": "The section's anchor, from <section anchor=\u2026>"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote",
+            "description": "Verbatim words from that section that support the claim"
           }
         },
         "type": "object",
         "required": [
           "doc",
-          "section"
+          "section",
+          "quote"
         ],
-        "title": "Citation"
+        "title": "Citation",
+        "description": "Where a grounded claim comes from (spec \u00a75). `doc` and `section` are copied from the\nsource tags in the prompt; `quote` lets code check that the section really says it."
       },
       "Concept": {
         "properties": {
@@ -2755,11 +2764,11 @@
             },
             "type": "array",
             "title": "Citations",
-            "description": "Org docs only"
+            "description": "Org docs only: citations[n-1] backs each [n] marker"
           },
           "not_in_docs": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/NotInDocs"
             },
             "type": "array",
             "title": "Not In Docs",
@@ -2895,6 +2904,34 @@
         ],
         "title": "Mission",
         "description": "Stored in courses.mission (JSONB): what the learner is really after (spec \u00a74.1)."
+      },
+      "NotInDocs": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "What the docs don't cover, as a short topic or question"
+          },
+          "general_knowledge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "General Knowledge",
+            "description": "Optional general (not org-specific) knowledge on it, or null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "general_knowledge"
+        ],
+        "title": "NotInDocs",
+        "description": "Something the learner needs that the org's docs don't cover (spec \u00a75)."
       },
       "OrgDocDetail": {
         "properties": {
@@ -3432,6 +3469,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Misbelief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Citation"
               },
               {
                 "type": "null"

@@ -9,6 +9,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { BackLink, Page } from "@/components/app-shell";
+import { DocCitation } from "@/components/doc-citation";
 import { MasteryMeter } from "@/components/mastery-meter";
 import { PlanDiffView } from "@/components/plan-diff";
 import { Badge } from "@/components/ui/badge";
@@ -341,6 +342,12 @@ function ResultView({
                 <p className="text-muted-foreground pl-7 text-sm">
                   Your pick reflects <span className="text-magenta-ink font-semibold">{q.misconception.label}</span>:{" "}
                   {q.misconception.note}
+                </p>
+              )}
+              {q.source && (
+                <p className="pl-7 text-sm">
+                  <span className="text-muted-foreground">From your docs: </span>
+                  <DocCitation citation={q.source} />
                 </p>
               )}
             </li>

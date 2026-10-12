@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP3 ✅ merged (PR #4). CP4 (J3: org course grounded in docs) in progress on branch `cp4/org-grounding` (draft PR #6). **PC4.1 ✅** (4 Acme AI docs seeded; section anchors + doc-set hash in `agent/sources.py`; org docs API + page; org course drafts pinned to a doc set, ADR-0028). Next: **PC4.2** (`ground-in-sources` modifier skill: citations on every claim, "not in your docs"; `doc_set_hash` in the semantic bucket).
+> **Current status:** CP3 ✅ merged (PR #4). CP4 (J3: org course grounded in docs) in progress on branch `cp4/org-grounding` (draft PR #6). **PC4.1 ✅** (4 Acme AI docs seeded; section anchors + doc-set hash; org docs API + page; org course drafts pinned to a doc set, ADR-0028). **PC4.2 ✅** (`ground-in-sources` modifier; docs first in the prompt; `[n]` citations with verbatim quotes checked by code; grounded lessons + quizzes; composed docs' hash keys both cache tiers, ADR-0029; `make eval-grounding`). Next: **PC4.3** (admin template flow with a grounded map, assign to dana; org-admin cache impact view).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.

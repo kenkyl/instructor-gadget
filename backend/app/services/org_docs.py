@@ -6,6 +6,7 @@ when it is created, and an in-place edit would change what a pinned course is gr
 without changing the hash it was cached under.
 """
 
+import logging
 import uuid
 from datetime import datetime
 
@@ -16,10 +17,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent import sources
-from agent.sources import MAX_DOC_CHARS, MAX_SET_CHARS, DocSection
+from agent.sources import MAX_DOC_CHARS, MAX_SET_CHARS, DocSection, Grounding, SourceDoc
 from agent.types import SLUG
 from app.auth import CurrentUser
-from app.models import Membership, Org, OrgDoc, Role
+from app.models import Course, CourseScope, Membership, Org, OrgDoc, Role
+
+log = logging.getLogger(__name__)
 
 
 class OrgMembershipOut(BaseModel):
@@ -190,3 +193,29 @@ async def resolve_doc_set(db: AsyncSession, org_id: uuid.UUID, slugs: list[str])
             f"{MAX_SET_CHARS:,}. Pick fewer docs.",
         )
     return docs
+
+
+async def course_grounding(db: AsyncSession, course: Course) -> Grounding | None:
+    """The docs an org course's generations are grounded in, composed for the prompt (PC4.2).
+    None for a personal course.
+
+    The hash is recomputed from the docs loaded here, which are the docs the model will see.
+    The course's stored `doc_set_hash` is what it was created with; they differ only if a doc
+    changed under it, which the API forbids and only `make seed` can do (ADR-0028)."""
+    if course.scope != CourseScope.org:
+        return None
+    ids = [uuid.UUID(str(i)) for i in course.doc_ids]
+    docs = list(await db.scalars(select(OrgDoc).where(OrgDoc.id.in_(ids))))
+    if not docs or len(docs) != len(ids) or course.org_id is None:
+        # A doc can't be deleted through the API, so this is a broken course, not a user error.
+        raise HTTPException(409, "This course's docs are missing; ask an org admin to rebuild it.")
+    grounding = sources.compose(
+        str(course.org_id), (SourceDoc(d.slug, d.title, d.content_md) for d in docs)
+    )
+    if grounding.doc_set_hash != course.doc_set_hash:
+        log.warning(
+            "course %s: its docs changed since it was created (re-seeded?); lessons are grounded "
+            "in, and cached under, the current text",
+            course.id,
+        )
+    return grounding

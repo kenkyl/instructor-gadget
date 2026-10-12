@@ -42,19 +42,29 @@ class ExactEntry(BaseModel):
     output: dict[str, Any]
 
 
-def exact_key(skill: str, call: str, model: str, prompt_version: str, payload: BaseModel) -> str:
-    """Canonical JSON (sorted keys, no whitespace), so equal inputs always hash the same."""
-    canonical = json.dumps(
-        {
-            "skill": skill,
-            "call": call,
-            "model": model,
-            "prompt_version": prompt_version,
-            "input": payload.model_dump(mode="json"),
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+def exact_key(
+    skill: str,
+    call: str,
+    model: str,
+    prompt_version: str,
+    payload: BaseModel,
+    *,
+    doc_set_hash: str | None = None,
+) -> str:
+    """Canonical JSON (sorted keys, no whitespace), so equal inputs always hash the same.
+
+    A grounded call's docs are in the system prompt, not the input, so their hash is part of
+    the key (ADR-0029). Ungrounded keys leave it out and stay what they were before."""
+    body = {
+        "skill": skill,
+        "call": call,
+        "model": model,
+        "prompt_version": prompt_version,
+        "input": payload.model_dump(mode="json"),
+    }
+    if doc_set_hash is not None:
+        body["doc_set_hash"] = doc_set_hash
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
     return PREFIX + hashlib.sha256(canonical.encode()).hexdigest()
 
 

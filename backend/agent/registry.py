@@ -184,7 +184,13 @@ class Registry:
         return f"{skill}@{self.skills[skill].meta.version}+{digest[:8]}"
 
     def system_prompt(self, skill: str, call: str, *, sources: str | None = None) -> str:
-        """Shared conduct rules + skill + call (+ grounding rules and docs for org courses)."""
+        """Shared conduct rules + skill + call; for an org course, the source documents first
+        and the grounding rules last.
+
+        Documents go first: long material above the instructions that use it is how the model
+        reads it best, and a doc set's text is then an identical prefix for every call on that
+        course, which prompt caching could reuse. The grounding rules go last because they
+        override the call's own "leave citations empty" (ADR-0029)."""
         c = self.call(skill, call)
         parts = [
             "# Instructor conduct rules\n\n" + self.conduct,
@@ -192,8 +198,8 @@ class Registry:
             f"# Task: {call}\n\n" + c.instructions,
         ]
         if sources is not None:
+            parts.insert(0, "# Source documents\n\n" + sources)
             parts.append("# Grounding rules\n\n" + self._grounding().instructions)
-            parts.append("# Source documents\n\n" + sources)
         return "\n\n---\n\n".join(parts)
 
     def _grounding(self) -> Skill:

@@ -610,7 +610,9 @@ Generated lesson content for one concept in one enrollment, stored **surface-neu
   "content": { "explanation_md": "Counterintuitive part first: a failing **readiness** probe never restarts anything…",
                "example_md": "During Acme AI's inference-gateway deploy…",
                "diagram_mermaid": "flowchart LR\n  P[Pod] -->|readiness fails| S[Removed from Service]\n  P -->|liveness fails| R[Container restarted]",
-               "citations": [{ "doc": "on-call-runbook", "section": "health-checks" }], "not_in_docs": [] } }
+               "citations": [{ "doc": "on-call-runbook", "section": "health-checks",
+                                "quote": "A failing readiness check removes the pod from the Service." }],
+               "not_in_docs": [{ "point": "Probe timeouts for GPU nodes", "general_knowledge": null }] } }
 ```
 
 #### `quiz_attempts` ✅
@@ -766,8 +768,11 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | LessonOutput | `explanation_md` | str | Counterintuitive part first, using the learner's analogy domain |
 | | `example_md` | str | One worked example |
 | | `diagram_mermaid` | str | Structure or flow |
-| | `citations` | list[{doc, section}] | Required for claims drawn from org docs |
-| | `not_in_docs` | list[str] | Topics flagged "This isn't covered in your docs" |
+| | `citations` | list[Citation] | Org courses: `citations[n-1]` backs each `[n]` marker in `explanation_md` / `example_md` (✔︎ PC4.2, ADR-0029) |
+| | `not_in_docs` | list[NotInDocs] | Org courses: what the docs don't cover, shown as "This isn't covered in your docs" (✔︎ PC4.2) |
+| Citation | `doc`, `section`, `quote` | str | A doc slug and a section anchor from the composed docs, and words quoted verbatim from that section |
+| NotInDocs | `point`, `general_knowledge` | str, str \| null | The gap, and optional general (not org) knowledge on it, labelled as such |
+| | (grounded validator) | | Checked only on a fresh model output (validation context, ADR-0015). With grounding: every citation names a real section and its quote is in that section's text (case, whitespace and markdown ignored); every `[n]` has a citation and every citation a marker; a lesson cites or names a gap. Without grounding: both lists empty. Stored rows load without these checks |
 | | (validator) | | `diagram_mermaid` must be bare Mermaid (no ``` fences) starting with flowchart, graph, sequenceDiagram, stateDiagram-v2 or classDiagram, with no `click` directives; a violation earns the one re-ask |
 | TeachInput | `topic`, `target_level`, `analogy_domain`, `formats` (sorted), `concept`, `prereq_titles` | | The `teach-concept` input: **no learner ids, assessment or misconceptions**, so it's shareable and its exact-cache key matches across learners in the same bucket (ADR-0007) |
 | QuizOutput | `questions` | list[MCQ] (exactly 4, ids `q1`–`q4`) | Transfer situations, one idea per question. Validators: at least one question at the concept's objective level; for `design_targeted`, at least one targets a logged misconception (ADR-0021) |
@@ -777,8 +782,10 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | | `answer` | a–d | **Server-side only** |
 | | `transfer_situation`, `objective_level` | str, Bloom level | |
 | | `targets_logged_misconception` | str \| null | A logged misconception's label |
+| | `source` | Citation \| null | Org courses: the section the answer comes from (✔︎ PC4.2). **Server-side until submitted** (its quote gives the answer away); the result's `QuestionResult.source` (in `quiz_attempts.feedback`) shows it after. Grounded validator: at least one question has one, each real and verbatim; none without grounding |
 | ShortItem | `id` ("explain"), `prompt`, `transfer_situation` | | |
 | | `rubric` | {score_1..score_4: str} | **Server-side only** (a hint otherwise) |
+| | `source` | Citation \| null | Org courses: the section the rubric draws on (server-side only) |
 | Misbelief | `label`, `note` | str (≤120), str | A distractor's belief or the grader's finding; logged to `misconceptions` |
 | QuizInput | `topic`, `target_level`, `concept`, `lesson` ({explanation_md, example_md} \| null for test-out), `round` | | `design` input, exact-cached; `TargetedQuizInput` adds `misconceptions` (never cached) |
 | GradeOutput | `transfer_handled`, `score` 1–4, `feedback`, `misconception` | | Validator: a 4 requires `transfer_handled` (§4.7). Not stored as such: folded into `quiz_attempts.feedback` |
@@ -800,6 +807,8 @@ Defined in `agent/sources.py`. One entry per heading (`#` to `######`) outside a
 |---|---|---|---|
 | DocSection | `anchor` | str | GitHub-style slug of the heading; a repeat gets `-2`, `-3`, … |
 | | `heading` | str | The heading text without inline marks or closing `#`s |
+
+**Grounded calls (✔︎ PC4.2, ADR-0029).** Not stored: for each org-course lesson or quiz, `app/services/org_docs.course_grounding` loads the course's pinned docs and `sources.compose` renders them (sorted by slug) as `<documents><document slug title><section anchor>…</section></document></documents>`, first in the system prompt. Its `doc_set_hash` is recomputed from the docs it rendered and keys both cache tiers; a mismatch with `courses.doc_set_hash` (a re-seeded doc) is logged.
 
 Limits (`agent/sources.py`): one doc is at most `MAX_DOC_CHARS` = 60,000 characters, and the docs behind one course at most `MAX_SET_CHARS` = 160,000 (about 40k tokens: context stuffing has a ceiling, RAG is the upgrade past it).
 
@@ -849,7 +858,7 @@ Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, re
 ```
 
 ### 6.3 Exact LLM cache: `llm:exact:{sha256}` (native JSON + index)
-- **Key:** sha256 of the canonical JSON of `{skill, call, model, prompt_version, cacheable inputs}`. Learner ids are never part of it.
+- **Key:** sha256 of the canonical JSON of `{skill, call, model, prompt_version, cacheable inputs}`, plus `doc_set_hash` for a grounded (org) call, whose docs are in the system prompt rather than the input; a grounded call's `prompt_version` also includes `ground-in-sources` (ADR-0029). Learner ids are never part of it.
 - **`design-assessment`** is keyed on the **lesson's content hash**, so a lesson and its quiz always match.
 - **Document:**
   ```json
@@ -877,7 +886,7 @@ RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `idx:llm_semantic:{e
 | Embedded text (`prompt`) | `"{topic}\n{concept title}\n{mastery statement}"`, embedded locally with `all-MiniLM-L6-v2` (384 dims, float32, cosine) |
 | `response` | The validated `LessonOutput` JSON |
 | `metadata` | `{cost_usd, latency_ms, created_at}`: what generating it cost, so a hit can log what it saved |
-| Filter TAGs (the "bucket") | `skill_call`, `model`, `prompt_version`, `org_id` (or `public`), `target_level`, `formats_key` (sorted, `+`-joined), `analogy_key` (slugged or `none`), `doc_set_hash` (or `none`). All must match before the vector search |
+| Filter TAGs (the "bucket") | `skill_call`, `model`, `prompt_version`, `org_id` (or `public`), `target_level`, `formats_key` (sorted, `+`-joined), `analogy_key` (slugged or `none`), `doc_set_hash` (or `none`; for an org lesson, set by the wrapper from the docs actually composed into the prompt, and the call is refused if the key's `org_id` isn't the docs' org: ADR-0029). All must match before the vector search |
 | Threshold | `SEMANTIC_CACHE_DISTANCE_THRESHOLD` (cosine distance), default 0.12, chosen by the PC3.2 eval (`make eval-cache`, ADR-0026; it builds throwaway `test:idx:llm_semantic:eval-*` and `test:idx:intake_guard:eval-*` indexes on DB 0 and drops them). `SEMANTIC_CACHE_ENABLED=false` turns the tier off |
 | Read | Every `semantic`-policy call (today: `teach-concept.teach` for core lessons) after an exact miss. A hit sets `lessons.cache_result = semantic_hit` and `cache_key` = the entry's Redis key; `llm_calls` gets `similarity` (1 − distance) and the saved cost/latency |
 | Write | On a miss, after the output validates (alongside the exact entry) |

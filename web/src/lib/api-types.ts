@@ -593,12 +593,27 @@ export interface components {
          * @enum {string}
          */
         CallStatus: "ok" | "error";
-        /** Citation */
+        /**
+         * Citation
+         * @description Where a grounded claim comes from (spec §5). `doc` and `section` are copied from the
+         *     source tags in the prompt; `quote` lets code check that the section really says it.
+         */
         Citation: {
-            /** Doc */
+            /**
+             * Doc
+             * @description The doc's slug, from <document slug=…>
+             */
             doc: string;
-            /** Section */
+            /**
+             * Section
+             * @description The section's anchor, from <section anchor=…>
+             */
             section: string;
+            /**
+             * Quote
+             * @description Verbatim words from that section that support the claim
+             */
+            quote: string;
         };
         /** Concept */
         Concept: {
@@ -946,14 +961,14 @@ export interface components {
             diagram_mermaid: string;
             /**
              * Citations
-             * @description Org docs only
+             * @description Org docs only: citations[n-1] backs each [n] marker
              */
             citations?: components["schemas"]["Citation"][];
             /**
              * Not In Docs
              * @description Org docs only
              */
-            not_in_docs?: string[];
+            not_in_docs?: components["schemas"]["NotInDocs"][];
         };
         /** LessonView */
         LessonView: {
@@ -1005,6 +1020,22 @@ export interface components {
             deadline?: string | null;
             /** Analogy Domain */
             analogy_domain?: string | null;
+        };
+        /**
+         * NotInDocs
+         * @description Something the learner needs that the org's docs don't cover (spec §5).
+         */
+        NotInDocs: {
+            /**
+             * Point
+             * @description What the docs don't cover, as a short topic or question
+             */
+            point: string;
+            /**
+             * General Knowledge
+             * @description Optional general (not org-specific) knowledge on it, or null
+             */
+            general_knowledge: string | null;
         };
         /** OrgDocDetail */
         OrgDocDetail: {
@@ -1199,6 +1230,7 @@ export interface components {
             /** Correct */
             correct: boolean;
             misconception: components["schemas"]["Misbelief"] | null;
+            source?: components["schemas"]["Citation"] | null;
         };
         /**
          * QuizResult

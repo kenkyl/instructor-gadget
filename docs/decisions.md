@@ -354,3 +354,21 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - An admin can't fix a typo in place; they add a new doc and a new course. That's acceptable for a template that is assigned to many learners.
 - `make seed` upserts the seeded docs, so a developer edit to a seed file can leave an existing dev course with a stale pinned hash. PC4.2 therefore computes the bucket's hash from the docs actually put in the prompt, and treats the stored value as what the course was created with.
 **One-liner:** A course is built on a specific version of its docs, so the docs never change under it; a revision is a new doc.
+
+## ADR-0029: Grounding: docs first in the prompt, our own citations with verbatim quotes checked by code
+**Context:** Org lessons and quizzes must cite the doc and section behind every claim, and say "This isn't covered in your docs" instead of inventing (spec §5). The API's native Citations feature returns a 400 alongside `output_config.format`, and every call here uses structured output (ADR-0013). A grounded call's docs live in the system prompt, not the input, so nothing in the existing cache keys would tell two doc sets apart.
+**Decision:**
+- **Prompt:** `ground-in-sources` is a modifier skill composed into every org-course lesson, remediation lesson and quiz call. The docs go first in the system prompt, sorted by slug and with each section wrapped in a tag carrying its code-computed anchor; the grounding rules go last, so they override "leave citations empty". The docs are reference, not instructions.
+- **Contract:** text carries `[n]` markers; `citations[n-1]` = `{doc, section, quote}`. Gaps go in `not_in_docs` as `{point, general_knowledge | null}`. Quiz questions carry an optional `source` citation, hidden from the learner until they submit.
+- **Checks in code** (validation context, ADR-0015, so a failure earns the one retry): every citation names a real section; its quote is in that section's own text (case, spacing and markdown ignored); markers and citations match one-to-one; a lesson cites or names a gap; a grounded quiz has at least one sourced question. Ungrounded outputs must cite nothing.
+- **Cache identity:** the wrapper takes a `Grounding` whose `doc_set_hash` is computed from the docs it composed. That hash keys the exact tier, sets the semantic bucket's `doc_set_hash` (overriding whatever the service passed), and the grounded `prompt_version` includes the modifier's text. A semantic key whose `org_id` isn't the docs' org is refused before any call.
+**Alternatives:**
+- Native Citations: incompatible with structured output; dropping structured output would lose the validated lesson shape.
+- Citations without quotes: a valid anchor proves nothing about the claim; the quote makes "the section says so" checkable by code.
+- RAG: chunking, embedding and retrieval for a doc set that fits in ~40k tokens (ADR-0028's budget), and a retrieval miss would look like "not in your docs".
+- Instructions before docs: works, but long material above its instructions reads better, and an identical docs prefix is what API prompt caching would reuse.
+**Consequences:**
+- A lesson can still make an uncited claim in prose; per-sentence faithfulness is CP5's LLM-judge eval (`make eval-grounding` prints the cases today).
+- Docs are re-sent on every grounded call (~10k input tokens for the seeded set, about 2¢ on Sonnet 5.5). API prompt caching on the docs prefix is the follow-up if doc sets grow.
+- Personal-course prompt versions and cache keys are unchanged.
+**One-liner:** The model cites by copying anchors and quoting the doc, code checks every quote is really in that section, and the docs' own hash keeps an org's lessons in that org's cache.

@@ -23,6 +23,7 @@ from agent.llm import CallContext, LLMClient
 from agent.pedagogy import Rule, Score
 from agent.types import (
     Band,
+    Citation,
     Concept,
     ConceptMap,
     CourseConfig,
@@ -62,6 +63,7 @@ from app.services.learning import (
     overridden_concepts,
     progress_rows,
 )
+from app.services.org_docs import course_grounding
 
 
 # --- views (what the browser sees) --------------------------------------------------------------
@@ -95,6 +97,7 @@ class QuestionResult(BaseModel):
     answer: str
     correct: bool
     misconception: Misbelief | None  # the belief behind the distractor they picked
+    source: Citation | None = None  # org courses: where the docs say so (shown after submit)
 
 
 class ExplainResult(BaseModel):
@@ -254,6 +257,7 @@ async def open_quiz(
     course = await db.get(Course, enrollment.course_id)
     assert course is not None
     config = CourseConfig.model_validate(course.config)
+    grounding = await course_grounding(db, course)  # org courses test the org's practice (§5)
     # This learner's open beliefs about this concept and its prereqs target distractors (§4.6).
     beliefs = await _open_misconceptions(
         db,
@@ -277,9 +281,18 @@ async def open_quiz(
     )
     if beliefs:  # personal → never cached (ADR-0007)
         targeted = TargetedQuizInput(**base.model_dump(), misconceptions=beliefs)
-        quiz = await llm.run("design-assessment", "design_targeted", targeted, QuizOutput, ctx=ctx)
-    else:  # shareable → exact-cached on the lesson's content + round
-        quiz = await llm.run("design-assessment", "design", base, QuizOutput, ctx=ctx)
+        quiz = await llm.run(
+            "design-assessment",
+            "design_targeted",
+            targeted,
+            QuizOutput,
+            ctx=ctx,
+            grounding=grounding,
+        )
+    else:  # shareable → exact-cached on the lesson's content + round (+ the doc set)
+        quiz = await llm.run(
+            "design-assessment", "design", base, QuizOutput, ctx=ctx, grounding=grounding
+        )
 
     # Two opens can race (the lesson page prefetches the quiz while the learner reads, and
     # they may click "Take the quiz" before it lands): the first stored attempt wins.
@@ -346,6 +359,7 @@ async def submit_quiz(
                 answer=q.answer,
                 correct=chosen == q.answer,
                 misconception=picked.misconception if picked else None,
+                source=q.source,
             )
         )
     mcq_correct = sum(r.correct for r in results)

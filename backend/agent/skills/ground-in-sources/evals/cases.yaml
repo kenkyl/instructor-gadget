@@ -1,0 +1,50 @@
+# Eval cases for ground-in-sources (a modifier: these run another skill's call with grounding).
+# Run by `make evals` (CP5) against the seeded Acme AI docs; they need the live model. The
+# deterministic part (citations name real sections, quotes are verbatim, markers match) is
+# already enforced by validators on every call; these add what only a judge can see.
+
+grounded_teach:
+  - id: covered-concept
+    call: teach-concept.teach
+    docs: [acme/on-call-runbook, acme/service-map, acme/postmortem-pool-exhaustion, acme/how-we-ship]
+    input:
+      topic: "Technical readiness at Acme AI"
+      target_level: intermediate
+      analogy_domain: null
+      formats: [quizzes, reading]
+      concept:
+        id: pool-exhaustion
+        title: Connection-pool exhaustion
+        mastery_statement: "You can explain why model-router failed at 105% pool utilization but not at 60%"
+        objective_level: understand
+        prereqs: []
+        est_minutes: 20
+        concept_type: systems
+      prereq_titles: []
+    assert:
+      - "len(output.citations) >= 2"
+      - "a citation points at postmortem-pool-exhaustion"
+      - "the numbers in the lesson match the postmortem (10 connections, 50 ms hold, 105%) (LLM judge)"
+      - "no uncited claim about Acme AI's systems or practices (LLM judge)"
+
+  - id: uncovered-concept
+    call: teach-concept.teach
+    docs: [acme/on-call-runbook, acme/service-map, acme/postmortem-pool-exhaustion, acme/how-we-ship]
+    input:
+      topic: "Technical readiness at Acme AI"
+      target_level: intermediate
+      analogy_domain: null
+      formats: [quizzes, reading]
+      concept:
+        id: kafka-lag-triage
+        title: Triaging Kafka consumer lag
+        mastery_statement: "You can decide whether growing consumer lag needs a page"
+        objective_level: apply
+        prereqs: []
+        est_minutes: 20
+        concept_type: systems
+      prereq_titles: []
+    assert:
+      - "len(output.not_in_docs) >= 1"
+      - "the explanation says this isn't covered in your docs (LLM judge)"
+      - "no Acme-specific threshold, team or procedure for Kafka lag is invented (LLM judge)"

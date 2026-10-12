@@ -7,7 +7,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, ValidationInfo, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-from agent import plan
+from agent import plan, sources
 
 Level = Literal["novice", "intermediate", "strong", "expert"]  # claimed / assessed level
 TargetLevel = Literal["beginner", "intermediate", "advanced", "expert"]
@@ -189,8 +189,47 @@ class TeachInput(BaseModel):
 
 
 class Citation(BaseModel):
-    doc: str
-    section: str
+    """Where a grounded claim comes from (spec §5). `doc` and `section` are copied from the
+    source tags in the prompt; `quote` lets code check that the section really says it."""
+
+    doc: str = Field(description="The doc's slug, from <document slug=…>")
+    section: str = Field(description="The section's anchor, from <section anchor=…>")
+    quote: str = Field(description="Verbatim words from that section that support the claim")
+
+
+class NotInDocs(BaseModel):
+    """Something the learner needs that the org's docs don't cover (spec §5)."""
+
+    point: str = Field(description="What the docs don't cover, as a short topic or question")
+    general_knowledge: str | None = Field(
+        description="Optional general (not org-specific) knowledge on it, or null"
+    )
+
+
+def citation_errors(cited: list[tuple[str, Citation]], grounding: sources.Grounding) -> list[str]:
+    """Each (label, citation) names a real section of the composed docs and quotes it verbatim.
+    The label ("citation [2]", "q3") names it in the error the retry sends back."""
+    errors = []
+    for label, c in cited:
+        text = grounding.section_text(c.doc, c.section)
+        if text is None:
+            errors.append(
+                f"{label} points at {c.doc}#{c.section}, which isn't a section of the source "
+                "documents; copy `slug` and `anchor` from the tags"
+            )
+        elif not sources.quote_in(c.quote, text):
+            errors.append(
+                f"{label}'s quote isn't in {c.doc}#{c.section}; quote the section's words "
+                "exactly, or cite the section that says it"
+            )
+    return errors
+
+
+def _grounding(info: ValidationInfo) -> tuple[bool, sources.Grounding | None]:
+    """(is this a fresh model output?, the docs it must be grounded in). Stored outputs are
+    validated without context (ADR-0015), so these checks only run on the model's reply."""
+    ctx = info.context or {}
+    return "input" in ctx, ctx.get("grounding")
 
 
 class LessonOutput(BaseModel):
@@ -199,8 +238,10 @@ class LessonOutput(BaseModel):
     explanation_md: str = Field(min_length=1, description="Counterintuitive part first")
     example_md: str = Field(min_length=1, description="One complete worked example")
     diagram_mermaid: str = Field(min_length=1, description="Mermaid source, no code fences")
-    citations: list[Citation] = Field(default_factory=list, description="Org docs only")
-    not_in_docs: list[str] = Field(default_factory=list, description="Org docs only")
+    citations: list[Citation] = Field(
+        default_factory=list, description="Org docs only: citations[n-1] backs each [n] marker"
+    )
+    not_in_docs: list[NotInDocs] = Field(default_factory=list, description="Org docs only")
 
     @model_validator(mode="after")
     def diagram_is_renderable(self) -> Self:
@@ -211,6 +252,36 @@ class LessonOutput(BaseModel):
             raise ValueError(f"diagram_mermaid must start with one of {list(MERMAID_TYPES)}")
         if any(line.strip().startswith("click ") for line in src.splitlines()):
             raise ValueError("diagram_mermaid must not use click directives")
+        return self
+
+    @model_validator(mode="after")
+    def grounded_in_the_docs(self, info: ValidationInfo) -> Self:
+        fresh, grounding = _grounding(info)
+        if not fresh:
+            return self
+        if grounding is None:
+            if self.citations or self.not_in_docs:
+                raise ValueError("citations and not_in_docs must be empty: no source documents")
+            return self
+        if not self.citations and not self.not_in_docs:
+            raise ValueError(
+                "a lesson for this course cites the source documents, or says in not_in_docs "
+                "what they don't cover"
+            )
+        errors = citation_errors(
+            [(f"citation [{n}]", c) for n, c in enumerate(self.citations, start=1)], grounding
+        )
+        used = set(
+            sources.citation_markers(self.explanation_md)
+            + sources.citation_markers(self.example_md)
+        )
+        numbers = set(range(1, len(self.citations) + 1))
+        if dangling := sorted(used - numbers):
+            errors.append(f"markers {dangling} have no citation (there are {len(numbers)})")
+        if unused := sorted(numbers - used):
+            errors.append(f"citations {unused} are never referenced by an [n] marker in the text")
+        if errors:
+            raise ValueError("; ".join(errors))
         return self
 
 
@@ -261,6 +332,9 @@ class MCQ(BaseModel):
     targets_logged_misconception: str | None = Field(
         description="Label of a logged misconception a distractor targets, else null"
     )
+    source: Citation | None = Field(
+        default=None, description="Org docs only: the section the answer comes from, else null"
+    )
 
     @model_validator(mode="after")
     def one_correct_option(self) -> Self:
@@ -288,6 +362,9 @@ class ShortItem(BaseModel):
     prompt: str
     transfer_situation: str
     rubric: Rubric
+    source: Citation | None = Field(
+        default=None, description="Org docs only: the section the rubric draws on, else null"
+    )
 
 
 class QuizOutput(BaseModel):
@@ -313,6 +390,24 @@ class QuizOutput(BaseModel):
                 raise ValueError(
                     f"at least one question must target a logged misconception: {logged}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def grounded_in_the_docs(self, info: ValidationInfo) -> Self:
+        # Spec §5: a grounded course's quiz tests the org's actual practice, so it says where.
+        fresh, grounding = _grounding(info)
+        if not fresh:
+            return self
+        items = [(q.id, q.source) for q in self.questions] + [("explain", self.explain_item.source)]
+        cited = [(label, c) for label, c in items if c is not None]
+        if grounding is None:
+            if cited:
+                raise ValueError("every `source` must be null: no source documents")
+            return self
+        if not cited:
+            raise ValueError("at least one question must test the docs and give its `source`")
+        if errors := citation_errors(cited, grounding):
+            raise ValueError("; ".join(errors))
         return self
 
 

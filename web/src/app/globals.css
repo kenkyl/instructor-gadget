@@ -213,6 +213,7 @@
 .lesson-md pre { background: var(--muted); border-radius: var(--radius); padding: 0.875rem 1rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.55; }
 .lesson-md pre code { background: none; padding: 0; color: inherit; }
 .lesson-md a { color: var(--blue-ink); text-decoration: underline; text-underline-offset: 0.2em; }
+.lesson-md a.cite-marker { text-decoration: none; font-size: 0.75em; font-weight: 600; padding-left: 0.1em; }
 .lesson-md blockquote { border-left: 2px solid var(--rail); padding-left: 1rem; color: var(--muted-foreground); }
 .lesson-md table { border-collapse: collapse; font-size: 0.9375rem; }
 .lesson-md th, .lesson-md td { border-bottom: 1px solid var(--border); padding: 0.4rem 0.75rem 0.4rem 0; text-align: left; }
