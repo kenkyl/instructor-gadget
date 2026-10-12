@@ -23,8 +23,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP2 | J2: learn, check, adapt | ✅ merged (PR #3) |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ merged (PR #4) |
 | CP4 | J3: org course grounded in docs | ✅ merged (PR #6) |
-| CP5 | Dashboard + eval harness | in progress (branch `cp5/dashboard-evals`) |
-| CP6 | Hardening + sample data, docs, tag `v0.1.0` | |
+| CP5 | Dashboard + eval harness | ✅ built, PR #7 ready for review (branch `cp5/dashboard-evals`): PC5.1 ✅, PC5.2 ✅ |
+| CP6 | Hardening + sample data, docs, tag `v0.1.0` | in progress (branch `cp6/hardening`, stacked on CP5) |
 
 ## CP1: J1, create a course
 **Before starting:**
@@ -48,7 +48,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | PC2.3 | Connection-pool simulator prototype in a sandboxed iframe (`srcdoc`, `sandbox="allow-scripts"`). ✅ Seeded by `make seed`; shown on matching lessons for hands-on learners | Find and explain its "surprise" threshold (done by the AI at Kyle's request) |
 | PC2.4 | `design-assessment` (4 MCQ + 1 short transfer item; answer keys stay server-side), `grade`, submit, misconception logging. ✅ Two quiz calls, shared vs targeted (ADR-0021) | — |
 | PC2.5 | Adaptation rules, `remediate`, plan versions + the diff UI. ✅ Remediation as an inserted prerequisite (ADR-0022) | The `adapt` branch table (done by the AI at Kyle's request) |
-| PC2.6 | Prerequisite gate, override warning, test-out offer (ADR-0006). Draft 8 grader answers for Kyle to label. ✅ `backend/evals/grader_calibration.yaml` | Label the 8 answers (1–4): still open, needed by CP5 |
+| PC2.6 | Prerequisite gate, override warning, test-out offer (ADR-0006). Draft 8 grader answers for Kyle to label. ✅ `backend/evals/grader_calibration.yaml` | Label the 8 answers (1–4): ✅ done by Kyle, used by `make evals` |
 
 ## CP3: Redis deep dive
 | PC | Build | ★ Kyle |
@@ -68,8 +68,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 ## CP5: Dashboard + evals
 | PC | Build |
 |---|---|
-| PC5.1 | Dashboard: mastery bands, "N due for review", badges |
-| PC5.2 | `make evals`: diagnosis personas, map constraints, pedagogy, grader calibration (Kyle's labels), grounding judge, cache false-hit rate |
+| PC5.1 | Dashboard: mastery bands, "N due for review", badges. ✅ Per-concept band strip with a due ring (`pedagogy.band_counts`, `is_due`); the admin's "Org courses you manage" (`GET /api/orgs/{slug}/courses`) |
+| PC5.2 | `make evals`: diagnosis personas, map constraints, pedagogy, grader calibration (Kyle's labels), grounding judge, cache false-hit rate. ✅ Through the wrapper, no cache tier; `judge-grounding` skill; first run $0.58 (ADR-0031) |
 
 ## CP6: Hardening + sample data
 | PC | Build |
@@ -115,7 +115,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - Intake guard misses found by the PC3.2 eval: "how to cook meth at home" (0.518) and "what's the score of the Lakers game" (0.552) pass. Not fixed by adding references (that fits the test set); the deferred probe flag above covers them too.
 - Semantic-cache recall with MiniLM is ~33% of genuine paraphrases at the safe threshold (ADR-0026). Levers to try with `make eval-cache`: a stronger local embedding model (needs Kyle's OK), or embedding the title + mastery statement without the topic.
 - Org docs are immutable via the API (ADR-0028), so a revised doc is a new doc and a new course. If admins need real revisions, versioned docs (`doc_versions`) are the upgrade; the grounded-prompt composer hashes the docs it actually sends (✔︎ PC4.2), because `make seed` upserts seeded docs.
-- Grounding checks are deterministic (real sections, verbatim quotes, markers ↔ citations), but prose can still make an uncited claim. Per-claim faithfulness is CP5's grounding judge; `make eval-grounding` holds its cases.
+- Grounding checks are deterministic (real sections, verbatim quotes, markers ↔ citations), but prose can still make an uncited claim. ✔︎ CP5's judge measures it (`make evals`); its first run found a couple of uncited Acme statements in one lesson. The judge itself needs human-labelled claims to be trusted (ADR-0031).
+- Grader calibration (CP5): exact 13/24, within one 24/24, all misses one point low. Kyle to decide whether labels a2, a5, a6 should follow the item rubric, or the rubric should change.
 - Grounded calls re-send the docs every time (~10k input tokens for the seeded set). They're first in the system prompt, so API prompt caching (a `cache_control` breakpoint after the docs, and cache-read tokens in `llm_calls`) is a small change if doc sets grow.
 - ~~PC4.3: the admin's template map needs `course_grounding` too~~: resolved in PC4.3. `grade` and `remediate.explain_change` aren't grounded (the rubric and the lesson already are).
 - The template map isn't checked against the docs by code: nothing proves each concept is covered. A concept → docs mapping (and a coverage view for admins) would make it checkable (ADR-0030); until then it's the CP5 grounding judge's job.

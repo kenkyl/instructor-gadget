@@ -1,9 +1,40 @@
 # Build log
 
-> **Current status:** CP4 ✅ merged (PR #6). **CP5 in progress** (dashboard + `make evals`) on branch `cp5/dashboard-evals`, draft PR open. Next: PC5.1 (dashboard bands, due count, badges, org courses you manage), then PC5.2 (`make evals`). CP6 (`cp6/hardening`) will be stacked on CP5.
+> **Current status:** CP4 ✅ merged (PR #6). **CP5 ✅ built** (dashboard + `make evals`) on branch `cp5/dashboard-evals`, PR #7 ready for review: PC5.1 ✅, PC5.2 ✅. **CP6 in progress** on `cp6/hardening`, stacked on CP5 (draft PR based on `cp5/dashboard-evals`; rebase-free: after CP5 merges, retarget it to `main` and merge `origin/main` in). Next: PC6.1 (sample data, `make warm-cache`, `make reset`).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
+
+---
+
+## CP5: dashboard + eval harness (Mon 2026-10-12, PR #7)
+
+**What we built**
+- **PC5.1, dashboard:** each course shows one cell per concept in plan order, coloured by mastery band (not started / shaky / learning / solid / mastered), with a ring on any concept due for review, plus the band counts in words. `pedagogy.band_counts` and `pedagogy.is_due` hold the rules (not started ≠ shaky; only a passed FSRS date is due). An org admin's dashboard lists "Org courses you manage" (`GET /api/orgs/{slug}/courses`: status, doc count, assigned count), because a template has no enrollment for its admin and was otherwise reachable only by URL; the `/org/impact` course rows link to the course page.
+- **PC5.2, `make evals`:** six checks in one table, every model call through the production wrapper with no cache tier, 4 at a time, a $5 stop: diagnosis personas (4 × 3 runs), map constraints (3 configs incl. the org template), pedagogy unit tests, grader calibration against Kyle's 8 labels (× 3), the `judge-grounding` skill over the grounded lessons and template map plus a planted invention, and the semantic cache's false-hit rate.
+- **First run (Sonnet 5.5, $0.58, 47 requests, 69 s):** diagnosis within one level 12/12, consistent 3/4 personas; maps 3/3 valid; grader exact 13/24, within one 24/24, no restatement scored 4; judge 8/9 assertions, 0 invented org details, planted invention caught; cache false hits 0/15. Full report: `backend/evals/results/2026-10-12.md`. 251 deterministic tests.
+
+**Key prompts**
+- Kyle's CP5/CP6 plan: speed mode, no stops between PCs, CP6 stacked on CP5, live-eval spend pre-authorized to $5 with a cut order (personas first) that wasn't needed.
+- Kyle's fold-in: the admin's org-course list, because nothing linked back to a template.
+
+**Decisions**
+- [ADR-0031](docs/decisions.md): `make evals` measures fresh generations through the wrapper; the grounding judge is a versioned product skill (`cache: never`) and is itself unvalidated.
+- P1+ 1 (outside knowledge) will be ADR-0032, not 0031.
+
+**Where the AI went wrong or was corrected**
+- The dashboard already had the Complete badge, the due badge and a concept strip; the brief's "mastery bands per concept" was the only real gap. Checking first kept PC5.1 small.
+- The grader disagreed with 11 of 24 labels, every time one point lower. Reading them, the disagreements trace to the labels vs. the item's own rubric (a2 is "right for the wrong reason", a 1 by §4.7; a5/a6 never address the 5,000-thread plan, the rubric's 2), not to the prompt. Left for Kyle rather than tuning the prompt to 8 answers.
+- The accurate-intermediate persona came back intermediate once and strong twice: within one level, but the only inconsistent persona.
+
+**Tradeoffs accepted**
+- The judge uses the same model as the generator; validating it needs hand-labelled claims.
+- `make evals` isn't in CI (cost, and it needs the key); its committed inputs are checked by `make test`.
+- The dashboard now loads every progress row (for the strip) instead of SQL counts; fine at Phase 1 sizes and cached in Redis.
+
+**How to verify**
+- `make test` (251 pass, no API); `make evals` (~$0.60) prints the table above.
+- Log in as priya: the dashboard lists "Org courses you manage"; `/org/impact` course titles link to the course page. As kyle, a course mid-way shows coloured cells and the band counts.
 
 ---
 
