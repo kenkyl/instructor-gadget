@@ -231,7 +231,7 @@ async def completed_course(db: AsyncSession, redis: Redis, kyle: CurrentUser, sp
     course = await _mapped_course(db, kyle, spec)
     await courses.accept_map(db, redis, kyle, course)
     enr = await _enrollment(db, course, kyle)
-    await _backdate(db, enr, now - timedelta(days=10))
+    await _backdate(db, enr, now - timedelta(days=40))  # listed below the active course
     cmap = ConceptMap.model_validate(spec["template_plan"])
     rows = await _rows(db, enr.id)
     # Mostly 4s over the last week (FSRS: next review in 8 days), two 3s (2 days) now due.

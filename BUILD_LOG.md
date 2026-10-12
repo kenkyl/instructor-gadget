@@ -1,9 +1,39 @@
 # Build log
 
-> **Current status:** CP5 ✅ built, PR #7 ready for review (`cp5/dashboard-evals`). **CP6 in progress** (hardening, sample data, docs) on `cp6/hardening`, stacked on CP5: its draft PR targets `cp5/dashboard-evals` until PR #7 merges, then gets retargeted to `main` with `origin/main` merged in (no rebase). Next: PC6.1 (sample data, `make warm-cache`, `make reset`). Tag `v0.1.0` only after both PRs merge.
+> **Current status:** CP5 ✅ built, PR #7 ready for review (CI green). **CP6 ✅ built** (sample data, reset, warm-cache, docs, run-through) on `cp6/hardening`, draft PR #8 stacked on CP5. Next: Kyle merges PR #7 (merge commit); then retarget PR #8 to `main`, merge `origin/main` into `cp6/hardening` (no rebase), push, mark ready; Kyle merges; then `git tag v0.1.0 && git push --tags`.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
+
+---
+
+## CP6: hardening, sample data, docs (Mon 2026-10-12, PR #8, stacked on #7)
+
+**What we built**
+- **PC6.1, sample state:** `make reset` wipes every app table (TRUNCATE), deletes only `sess:*` and `dash:*` (never FLUSHDB; the LLM caches and indexes stay), re-seeds, and loads `seed/sample.py`: kyle's "Incident investigation fundamentals for on-call engineers" at 4/10 with one concept due, a shaky concept with a logged misconception and a remediation (plan v1 → v2), a completed "Redis data structures" with its badge and 2 due, and the Acme AI template accepted and assigned to dana. Built through the real services (create, accept, assign) with every mastery, band and review date from pedagogy; `tests/test_sample.py` replays the history in memory. The maps are real model output (two exported from development runs, one generated for the fixture, $0.03). `make warm-cache` runs in the app's lifespan: kyle's open lessons stored, dana's cached only, so her first click is a real exact hit ($0.21 cold, $0.02 after a reset). A `reset-sample-data` skill wraps both with checks.
+- **PC6.2, docs:** `walkthrough.md` (the click path for J1–J3 with the sample users), `architecture.md` (components, the J2 sequence, where state lives, the four Redis uses), `overview.md`, `ai-workflow.md` (drafted from this log), and a README with the quickstart through `make reset`.
+- **PC6.3, run-through from `make reset`:** sample checks through the web proxy (4/10, 1 due, plan v1 → v2, remediation lesson stored; dana's first lesson an exact hit in 17 ms with 10 citations and $0.04 saved; priya's course list and org impact), then live J1 → J2 (probe 5.1 s, assess 7.7 s re-levelled to novice with the reason, map 11.4 s with 10 concepts, lesson 12.8 s streamed, quiz 17.8 s, a bad answer scored 1 → remediation + plan v2 in 7.3 s), and screenshots of both dashboards. Then reset again to the known state. 253 deterministic tests.
+
+**Key prompts**
+- Kyle: "include a pre-built org course (template accepted, dana assigned) so the admin flow shows without a ~40 s build", and reset must handle the leftover verification courses (it wipes them with everything else).
+
+**Decisions**
+- No new ADR: the reset follows ADR-0019 (never flush) and ADR-0011 (cache-aside keys are deleted, not patched); warm-cache uses the production wrapper and services unchanged.
+
+**Where the AI went wrong or was corrected**
+- The first completed-course history put every concept's review in the past ("8 due"), which buried the signal. Checking FSRS's first intervals (2 days for a 3, 8 for a 4) let the history be scripted so exactly two are due.
+- The completed course sorted above the active one (enrollments list newest first); its enrollment is now backdated further.
+- The exported fixture first carried assessment answers typed during development testing; they weren't needed for the sample and the repo is public, so they were dropped.
+- The run-through's "bad topic" check used "how to cook meth at home", which is one of the intake guard's documented misses, so it passed (as documented). The walkthrough doesn't use it.
+
+**Tradeoffs accepted**
+- The generated `docs/architecture/` (visualizer) is a CP1 snapshot; `docs/architecture.md` is the current hand-written one. Rerun `/visualizer:architecture` to refresh it.
+- warm-cache's cache-only calls are logged against the org course with no learner, so org impact shows a little spend or savings not tied to a person.
+- `make evals` wasn't re-run at this boundary: nothing since CP5 changed a prompt, a skill or the wrapper.
+
+**How to verify**
+- `make reset && make warm-cache && make dev`, then follow `docs/walkthrough.md`.
+- `make test` (253 pass).
 
 ---
 
