@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP3 ✅ complete: PC3.1 semantic tier (ADR-0023), PC3.2 cache eval (ADR-0026), PC3.3 intake guard (ADR-0024), PC3.4 trace + cache impact (ADR-0027). PR #4 (`cp3/redis-deep-dive`) is ready for Kyle's review and merge. Next: after the merge, `git switch main && git pull`, then start **CP4** (J3: org course grounded in docs) on a new branch `cp4/org-grounding` with a draft PR.
+> **Current status:** CP3 ✅ merged (PR #4). CP4 (J3: org course grounded in docs) started on branch `cp4/org-grounding` (draft PR #6). Next: **PC4.1** (the 4 Acme AI docs; `org_docs` with section anchors; upload/select).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
