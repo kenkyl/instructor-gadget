@@ -260,6 +260,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enrollments/{enrollment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Enrollment
+         * @description The learner's plan with per-concept status and band.
+         */
+        get: operations["get_enrollment_api_enrollments__enrollment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/lesson": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lesson
+         * @description The stored lesson, or 404 if it hasn't been generated yet (then POST to stream it).
+         */
+        get: operations["get_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_get"];
+        put?: never;
+        /**
+         * Open Lesson
+         * @description Stream the lesson as SSE: `field_delta`* (`restart`)? then `done` with the stored lesson,
+         *     or `error`. A lesson that already exists arrives as a single `done`.
+         */
+        post: operations["open_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Plan History
+         * @description Every plan version, newest first, with its trigger, rule, why and diff (spec §4.8).
+         */
+        get: operations["get_plan_history_api_enrollments__enrollment_id__plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/quiz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Quiz
+         * @description The open quiz for this concept, or a new one (no answer keys in the response).
+         */
+        post: operations["post_quiz_api_enrollments__enrollment_id__concepts__concept_id__quiz_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/quiz-attempts/{attempt_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Submit
+         * @description Grade, update mastery and the review date, then apply the adapt rules.
+         */
+        post: operations["post_submit_api_enrollments__enrollment_id__quiz_attempts__attempt_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/quiz-attempts/{attempt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Quiz Result */
+        get: operations["get_quiz_result_api_enrollments__enrollment_id__quiz_attempts__attempt_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/test-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Test Out
+         * @description Accept the test-out offer after a 4 (ADR-0006): a new plan version.
+         */
+        post: operations["post_test_out_api_enrollments__enrollment_id__concepts__concept_id__test_out_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Override Warning
+         * @description What will break if the learner opens this locked concept now (spec §4.8).
+         */
+        get: operations["get_override_warning_api_enrollments__enrollment_id__concepts__concept_id__override_get"];
+        put?: never;
+        /**
+         * Post Override
+         * @description Open a locked concept anyway: logged, with a new plan version.
+         */
+        post: operations["post_override_api_enrollments__enrollment_id__concepts__concept_id__override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -298,6 +464,17 @@ export interface components {
              */
             adjustment_message?: string | null;
         };
+        /**
+         * Band
+         * @description Mastery bands (spec §4.9). Stored in concept_progress.band; set by pedagogy.band().
+         * @enum {string}
+         */
+        Band: "shaky" | "learning" | "solid" | "mastered";
+        /**
+         * CacheResult
+         * @enum {string}
+         */
+        CacheResult: "miss" | "exact_hit" | "semantic_hit" | "bypass";
         /** CallInfo */
         CallInfo: {
             /** Name */
@@ -311,6 +488,13 @@ export interface components {
             stream: boolean;
             /** Prompt Version */
             prompt_version: string;
+        };
+        /** Citation */
+        Citation: {
+            /** Doc */
+            doc: string;
+            /** Section */
+            section: string;
         };
         /** Concept */
         Concept: {
@@ -367,6 +551,18 @@ export interface components {
              */
             sequence_rationale: string;
         };
+        /** ConceptRef */
+        ConceptRef: {
+            /** Concept Id */
+            concept_id: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ConceptStatus
+         * @enum {string}
+         */
+        ConceptStatus: "locked" | "unlocked" | "in_progress" | "complete";
         /**
          * CourseConfig
          * @description Stored in courses.config (JSONB). New knobs = new fields with defaults, no migration.
@@ -493,6 +689,34 @@ export interface components {
              */
             served_from: "cache" | "db";
         };
+        /** EnrollmentDetail */
+        EnrollmentDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Title */
+            title: string;
+            status: components["schemas"]["EnrollmentStatus"];
+            /** Completed At */
+            completed_at: string | null;
+            /** Plan Version */
+            plan_version: number;
+            concept_map: components["schemas"]["ConceptMap"];
+            /** Progress */
+            progress: components["schemas"]["ProgressView"][];
+        };
+        /**
+         * EnrollmentStatus
+         * @enum {string}
+         */
+        EnrollmentStatus: "active" | "complete";
         /** Evidence */
         Evidence: {
             /** Question Id */
@@ -507,6 +731,19 @@ export interface components {
              * @enum {string}
              */
             points_to: "novice" | "intermediate" | "strong" | "expert";
+        };
+        /** ExplainResult */
+        ExplainResult: {
+            /** Prompt */
+            prompt: string;
+            /** Answer */
+            answer: string;
+            /** Score */
+            score: (1 | 2 | 3 | 4) | null;
+            /** Feedback */
+            feedback: string | null;
+            /** Transfer Handled */
+            transfer_handled: boolean | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -540,10 +777,72 @@ export interface components {
             /** Postgres Version */
             postgres_version: string | null;
         };
+        /**
+         * LessonKind
+         * @enum {string}
+         */
+        LessonKind: "core" | "remediation";
+        /**
+         * LessonOutput
+         * @description Stored in lessons.content. Field order is the streaming order the learner sees.
+         */
+        LessonOutput: {
+            /**
+             * Explanation Md
+             * @description Counterintuitive part first
+             */
+            explanation_md: string;
+            /**
+             * Example Md
+             * @description One complete worked example
+             */
+            example_md: string;
+            /**
+             * Diagram Mermaid
+             * @description Mermaid source, no code fences
+             */
+            diagram_mermaid: string;
+            /**
+             * Citations
+             * @description Org docs only
+             */
+            citations?: components["schemas"]["Citation"][];
+            /**
+             * Not In Docs
+             * @description Org docs only
+             */
+            not_in_docs?: string[];
+        };
+        /** LessonView */
+        LessonView: {
+            /** Concept Id */
+            concept_id: string;
+            kind: components["schemas"]["LessonKind"];
+            content: components["schemas"]["LessonOutput"];
+            cache_result: components["schemas"]["CacheResult"];
+            prototype?: components["schemas"]["PrototypeView"] | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Username */
             username: string;
+        };
+        /**
+         * Misbelief
+         * @description A specific wrong belief (spec §4.6–4.7): what a distractor represents, or what the grader
+         *     found. Logged to `misconceptions` when a learner shows it.
+         */
+        Misbelief: {
+            /**
+             * Label
+             * @description Short name, e.g. 'requests = limits'
+             */
+            label: string;
+            /**
+             * Note
+             * @description The underlying belief in one plain sentence
+             */
+            note: string;
         };
         /**
          * Mission
@@ -565,6 +864,66 @@ export interface components {
             /** Analogy Domain */
             analogy_domain?: string | null;
         };
+        /** OverrideRequest */
+        OverrideRequest: {
+            /** Warning */
+            warning: string;
+        };
+        /** OverrideWarning */
+        OverrideWarning: {
+            /** Concept Id */
+            concept_id: string;
+            /** Unmet Prereqs */
+            unmet_prereqs: components["schemas"]["ConceptRef"][];
+            /** Warning */
+            warning: string;
+        };
+        /**
+         * PlanDiff
+         * @description Stored in plan_versions.diff: what changed against the previous version (spec §4.8).
+         */
+        PlanDiff: {
+            /** Added */
+            added?: components["schemas"]["Concept"][];
+            /** Removed */
+            removed?: string[];
+            /** Prereq Changes */
+            prereq_changes?: components["schemas"]["PrereqChange"][];
+            /** Status Changes */
+            status_changes?: components["schemas"]["StatusChange"][];
+            /** Test Out */
+            test_out?: string[];
+        };
+        /**
+         * PlanTrigger
+         * @enum {string}
+         */
+        PlanTrigger: "diagnosis" | "assignment" | "quiz_result" | "prereq_override" | "user_request";
+        /** PlanVersionView */
+        PlanVersionView: {
+            /** Version */
+            version: number;
+            trigger: components["schemas"]["PlanTrigger"];
+            /** Rule */
+            rule: string | null;
+            /** Reason */
+            reason: string;
+            diff: components["schemas"]["PlanDiff"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PrereqChange */
+        PrereqChange: {
+            /** Concept Id */
+            concept_id: string;
+            /** Added */
+            added?: string[];
+            /** Removed */
+            removed?: string[];
+        };
         /**
          * ProbeQuestionView
          * @description What the learner sees. `targets_concept` stays server-side: naming the concept being
@@ -576,6 +935,162 @@ export interface components {
             /** Prompt */
             prompt: string;
         };
+        /** ProgressView */
+        ProgressView: {
+            /** Concept Id */
+            concept_id: string;
+            kind: components["schemas"]["LessonKind"];
+            status: components["schemas"]["ConceptStatus"];
+            /** Mastery */
+            mastery: number | null;
+            band: components["schemas"]["Band"] | null;
+            /** Last Score */
+            last_score: number | null;
+            /** Attempts */
+            attempts: number;
+            /** Due */
+            due: string | null;
+            /** Has Lesson */
+            has_lesson: boolean;
+            /** Test Out */
+            test_out: boolean;
+            /** Overridden */
+            overridden: boolean;
+        };
+        /** PrototypeView */
+        PrototypeView: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Html */
+            html: string;
+        };
+        /** PublicOption */
+        PublicOption: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+        };
+        /** PublicQuestion */
+        PublicQuestion: {
+            /** Id */
+            id: string;
+            /** Prompt */
+            prompt: string;
+            /** Options */
+            options: components["schemas"]["PublicOption"][];
+        };
+        /** QuestionResult */
+        QuestionResult: {
+            /** Id */
+            id: string;
+            /** Prompt */
+            prompt: string;
+            /** Options */
+            options: components["schemas"]["PublicOption"][];
+            /** Chosen */
+            chosen: string | null;
+            /** Answer */
+            answer: string;
+            /** Correct */
+            correct: boolean;
+            misconception: components["schemas"]["Misbelief"] | null;
+        };
+        /**
+         * QuizResult
+         * @description Stored in quiz_attempts.feedback, so the results page can be reloaded.
+         */
+        QuizResult: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Concept Id */
+            concept_id: string;
+            /** Concept Title */
+            concept_title: string;
+            /** Mcq Correct */
+            mcq_correct: number;
+            /**
+             * Mcq Score
+             * @enum {integer}
+             */
+            mcq_score: 1 | 2 | 3 | 4;
+            /** Short Score */
+            short_score: (1 | 2 | 3 | 4) | null;
+            /**
+             * Score
+             * @enum {integer}
+             */
+            score: 1 | 2 | 3 | 4;
+            /** Questions */
+            questions: components["schemas"]["QuestionResult"][];
+            explain: components["schemas"]["ExplainResult"];
+            /** Misconceptions Named */
+            misconceptions_named: components["schemas"]["Misbelief"][];
+            /** Mastery */
+            mastery: number;
+            band: components["schemas"]["Band"];
+            /**
+             * Due
+             * Format: date-time
+             */
+            due: string;
+            rule: components["schemas"]["Rule"];
+            /** Why */
+            why: string;
+            /** Plan Version */
+            plan_version: number | null;
+            diff: components["schemas"]["PlanDiff"] | null;
+            /** Unlocked */
+            unlocked: components["schemas"]["ConceptRef"][];
+            test_out_offer: components["schemas"]["ConceptRef"] | null;
+            next_concept: components["schemas"]["ConceptRef"] | null;
+            /** Course Complete */
+            course_complete: boolean;
+        };
+        /**
+         * QuizView
+         * @description The quiz without answer keys, misconception tags or the rubric: any of those is a hint.
+         */
+        QuizView: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Concept Id */
+            concept_id: string;
+            /** Concept Title */
+            concept_title: string;
+            /** Round */
+            round: number;
+            /** Questions */
+            questions: components["schemas"]["PublicQuestion"][];
+            /** Explain Prompt */
+            explain_prompt: string;
+        };
+        /**
+         * Remedy
+         * @description Set by code (never the model) on a remediation concept inserted by the adapt rules.
+         */
+        Remedy: {
+            /** For Concept */
+            for_concept: string;
+            /** Angle */
+            angle: string;
+            misconception: components["schemas"]["Misbelief"] | null;
+        };
+        /**
+         * Rule
+         * @description Which rule fired after a graded attempt. Stored in plan_versions.rule when it changes the
+         *     plan (insert_remediation, offer_test_out once accepted).
+         * @enum {string}
+         */
+        Rule: "offer_test_out" | "advance" | "retake" | "insert_remediation";
         /** SeededUser */
         SeededUser: {
             /** Username */
@@ -595,6 +1110,22 @@ export interface components {
             modifier: boolean;
             /** Calls */
             calls: components["schemas"]["CallInfo"][];
+        };
+        /** StatusChange */
+        StatusChange: {
+            /** Concept Id */
+            concept_id: string;
+            /** Old */
+            old: string;
+            /** New */
+            new: string;
+        };
+        /** SubmitRequest */
+        SubmitRequest: {
+            /** Answers */
+            answers: {
+                [key: string]: string;
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -1027,6 +1558,352 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enrollment_api_enrollments__enrollment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_plan_history_api_enrollments__enrollment_id__plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanVersionView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_quiz_api_enrollments__enrollment_id__concepts__concept_id__quiz_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_submit_api_enrollments__enrollment_id__quiz_attempts__attempt_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                attempt_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quiz_result_api_enrollments__enrollment_id__quiz_attempts__attempt_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                attempt_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_test_out_api_enrollments__enrollment_id__concepts__concept_id__test_out_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanVersionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_override_warning_api_enrollments__enrollment_id__concepts__concept_id__override_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverrideWarning"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_override_api_enrollments__enrollment_id__concepts__concept_id__override_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+                concept_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanVersionView"];
                 };
             };
             /** @description Validation Error */

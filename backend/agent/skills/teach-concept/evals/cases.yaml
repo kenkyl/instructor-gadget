@@ -1,0 +1,24 @@
+# Eval cases for teach-concept. Run by `make evals` (CP5); these need the live model.
+# Diagram shape (bare Mermaid of an allowed type, no click) is also enforced by a validator.
+
+teach:
+  - id: systems-with-analogy
+    input:
+      topic: "Database connection pooling"
+      target_level: intermediate
+      analogy_domain: "restaurants"
+      formats: [hands_on, quizzes, reading]
+      concept:
+        id: pool-exhaustion
+        title: Pool exhaustion
+        mastery_statement: "You can diagnose why requests time out when a pool is exhausted"
+        objective_level: analyze
+        prereqs: [what-a-pool-is]
+        est_minutes: 20
+        concept_type: systems
+      prereq_titles: ["What a connection pool is"]
+    assert:
+      - "250 <= words(output.explanation_md) <= 500"
+      - "the explanation opens with a misconception, not a definition (LLM judge)"
+      - "the explanation maps a restaurant analogy and says where it breaks (LLM judge)"
+      - "output.citations == [] and output.not_in_docs == []"

@@ -1,28 +1,43 @@
-"""Idempotent seed: the sample org, its users, and memberships. Safe to run repeatedly.
+"""Idempotent seed: the sample org, its users, memberships and the seeded prototypes.
+Safe to run repeatedly.
 
 Run with `make seed`. Course/learner sample state is added at CP6.
 """
 
 import asyncio
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import get_settings
-from app.models import Membership, Org, Role, User
+from app.models import Membership, Org, Prototype, Role, User
 
-ORGS = [{"slug": "acme", "name": "Acme Payments"}]
+ORGS = [{"slug": "acme", "name": "Acme AI"}]
 
 USERS = [
     {"username": "kyle", "display_name": "Kyle (individual learner)"},
-    {"username": "dana", "display_name": "Dana (new SRE at Acme)"},
-    {"username": "priya", "display_name": "Priya (Acme eng manager)"},
+    {"username": "dana", "display_name": "Dana (new backend engineer at Acme AI)"},
+    {"username": "priya", "display_name": "Priya (Acme AI eng manager)"},
 ]
 
 MEMBERSHIPS = [  # (username, org slug, role)
     ("dana", "acme", Role.member),
     ("priya", "acme", Role.admin),
+]
+
+
+# Hand-built, hand-checked prototypes (spec §4.5; live generation is P1+). Each HTML file is
+# self-contained and only ever rendered in a sandboxed iframe. Which lessons show one is decided
+# in app/services/prototypes.py.
+PROTOTYPE_DIR = Path(__file__).parent / "prototypes"
+PROTOTYPES = [
+    {
+        "slug": "conn-pool-sim",
+        "concept_type": "systems",
+        "title": "Connection-pool exhaustion simulator",
+    },
 ]
 
 
@@ -47,6 +62,10 @@ async def seed(engine: AsyncEngine) -> None:
                     index_elements=["user_id", "org_id"], set_={"role": role}
                 )
             )
+        for proto in PROTOTYPES:
+            values = {**proto, "html": (PROTOTYPE_DIR / f"{proto['slug']}.html").read_text()}
+            stmt = insert(Prototype).values(**values)
+            await conn.execute(stmt.on_conflict_do_update(index_elements=["slug"], set_=values))
 
 
 async def main() -> None:
@@ -55,7 +74,10 @@ async def main() -> None:
         await seed(engine)
     finally:
         await engine.dispose()
-    print(f"Seeded {len(ORGS)} org, {len(USERS)} users, {len(MEMBERSHIPS)} memberships.")
+    print(
+        f"Seeded {len(ORGS)} org, {len(USERS)} users, {len(MEMBERSHIPS)} memberships, "
+        f"{len(PROTOTYPES)} prototype."
+    )
 
 
 if __name__ == "__main__":

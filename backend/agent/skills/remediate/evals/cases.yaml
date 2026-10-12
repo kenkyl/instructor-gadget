@@ -1,0 +1,43 @@
+# Eval cases for remediate. Run by `make evals` (CP5); these need the live model.
+
+explain_change:
+  - id: names-score-and-belief
+    input:
+      concept: { id: pool-exhaustion, title: Pool exhaustion, objective_level: analyze,
+                 mastery_statement: "You can diagnose why requests time out when a pool is exhausted",
+                 prereqs: [], est_minutes: 20, concept_type: systems }
+      score: 2
+      rule: insert_remediation
+      misconceptions:
+        - { label: "bigger pool always helps", note: "Believes adding connections always lowers latency." }
+      lesson_explanation: "(fixture)"
+    assert:
+      - "'2' in output.why and 'pool' in output.why.lower()"
+      - "output.remediation_concept.mastery_statement.lower().startswith('you can')"
+
+prereq_warning:
+  - id: specific-not-generic
+    input:
+      concept: { id: triage-5xx, title: Triage a 5xx spike, objective_level: apply,
+                 mastery_statement: "You can triage a 5xx spike", prereqs: [probes],
+                 est_minutes: 20, concept_type: systems }
+      unmet_prereqs:
+        - { id: probes, title: Liveness vs readiness, objective_level: understand,
+            mastery_statement: "You can explain what each probe failure does", prereqs: [],
+            est_minutes: 15, concept_type: systems }
+    assert:
+      - "the warning names a concrete misreading, not 'you may struggle' (LLM judge)"
+
+lesson:
+  - id: different-angle
+    input:
+      topic: "Database connection pooling"
+      target_level: intermediate
+      analogy_domain: null
+      original_concept_title: Pool exhaustion
+      original_explanation: "(fixture)"
+      concept: { id: pool-exhaustion-remedy-1, title: "Why a bigger pool can make it worse",
+                 objective_level: analyze, mastery_statement: "You can predict when adding connections won't help",
+                 prereqs: [], est_minutes: 10, concept_type: systems }
+    assert:
+      - "the explanation opens with the wrong belief (LLM judge)"

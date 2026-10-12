@@ -1,11 +1,13 @@
 """A fake AsyncAnthropic for tests: replays scripted responses and records every request.
 
-Only `client.beta.messages.create` is faked, because that's all the wrapper calls. Responses
-are real SDK `BetaMessage` objects, so the wrapper is exercised against the true types.
+Only `client.beta.messages.create` and `.stream` are faked, because that's all the wrapper
+calls. Responses are real SDK `BetaMessage` objects, so the wrapper is exercised against the true
+types. `.stream` replays the same scripted message, chunking its text like the SDK's text_stream.
 """
 
 import json
-from typing import Any, cast
+from collections.abc import AsyncIterator
+from typing import Any, Self, cast
 
 import anthropic
 from anthropic.types.beta import BetaMessage
@@ -59,6 +61,41 @@ class _Messages:
         if isinstance(step, Exception):
             raise step
         return step
+
+    def stream(self, **kwargs: Any) -> "_FakeStream":
+        return _FakeStream(self.create(**kwargs))
+
+
+CHUNK = 7  # characters per text delta: small enough to split fields mid-string
+
+
+class _FakeStream:
+    """Async context manager shaped like the SDK's BetaAsyncMessageStream."""
+
+    def __init__(self, pending: Any) -> None:
+        self._pending = pending  # the create() coroutine: raises scripted errors on enter
+        self._message: BetaMessage | None = None
+
+    async def __aenter__(self) -> Self:
+        self._message = await self._pending
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    @property
+    def text_stream(self) -> AsyncIterator[str]:
+        async def chunks() -> AsyncIterator[str]:
+            assert self._message is not None
+            text = "".join(b.text for b in self._message.content if b.type == "text")
+            for i in range(0, len(text), CHUNK):
+                yield text[i : i + CHUNK]
+
+        return chunks()
+
+    async def get_final_message(self) -> BetaMessage:
+        assert self._message is not None
+        return self._message
 
 
 class _Beta:

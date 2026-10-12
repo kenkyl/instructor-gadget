@@ -4,18 +4,11 @@ import asyncio
 import uuid
 from collections.abc import Sequence
 
-import pytest
-from fastapi import Request
 from sqlalchemy import Row, Select, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from agent.llm import LLMClient
-from agent.registry import get_registry
 from app.config import get_settings
-from app.deps import get_llm
-from app.main import app
 from app.models import ConceptProgress, LlmCall, PlanVersion
-from app.services.llm_log import DbCallSink
 from tests.llm_fakes import FakeAnthropic, message
 from tests.test_llm import GOOD_PROBE, SHORT_PROBE, assessed
 
@@ -23,20 +16,6 @@ INTAKE = {
     "config": {"topic": "Redis caching patterns", "self_level": "intermediate"},
     "mission": {"goal": "Ship a cache layer", "expert_means": "I can pick an eviction policy"},
 }
-
-
-@pytest.fixture
-def fake_llm():
-    """Swap in a fake model. Tests queue its replies with `fake_llm.reply(...)`."""
-    fake = FakeAnthropic()
-
-    def override(request: Request) -> LLMClient:
-        sink = DbCallSink(request.app.state.sessionmaker)
-        return LLMClient(fake.as_client(), get_registry(), sink, model="claude-sonnet-5-5")
-
-    app.dependency_overrides[get_llm] = override
-    yield fake
-    app.dependency_overrides.pop(get_llm, None)
 
 
 def _login(client, username: str) -> None:

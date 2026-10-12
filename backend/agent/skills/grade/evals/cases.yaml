@@ -1,0 +1,17 @@
+# Eval cases for grade. Run by `make evals` (CP5). Grader calibration against hand-labelled
+# answers (PC2.6) lives in backend/evals/.
+
+grade:
+  - id: restatement-caps-at-3
+    input:
+      concept_title: Pool exhaustion
+      mastery_statement: "You can diagnose why requests time out when a pool is exhausted"
+      item:
+        prompt: "A job runner with 4 workers starts timing out when jobs take 2 s instead of 1 s. Explain why, in your own words."
+        transfer_situation: "a worker pool, not a connection pool"
+        rubric: { score_1: "Blames the jobs alone", score_2: "Mentions queueing vaguely",
+                  score_3: "Explains pool exhaustion correctly in general terms",
+                  score_4: "Applies utilization: 4 workers, doubled job time halves capacity" }
+      answer: "When all connections are busy, new requests wait in a queue and time out."
+    assert:
+      - "output.score <= 3"

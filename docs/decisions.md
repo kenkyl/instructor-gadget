@@ -227,3 +227,64 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Cascade-remove the dependents: one cut could wipe out much of the map.
 **Consequences:** The edited map is always a valid DAG, and the old order minus the cut concept is still a valid order, so the instructor's sequence survives edits. The learner can skip a topic, but not the ordering that made the rest teachable.
 **One-liner:** Cut what you like; what came after it still comes after what came before it.
+
+## ADR-0018: FSRS runs on a day scale for quiz-graded concepts
+**Context:** The defaults in `fsrs` 6.3.2 (MIT) are tuned for flashcards: 1 min / 10 min learning steps, a 10 min relearning step, and random fuzzing. Our "card" is a whole concept reviewed by a quiz. Under the defaults, a Good first quiz is due again in 10 minutes, which floods "N due for review" right after every lesson. Fuzzing also makes tests nondeterministic, and it only helps spread load across large decks.
+**Decision:**
+- `pedagogy.SCHEDULER = Scheduler(learning_steps=(), relearning_steps=(), enable_fuzzing=False)`.
+- Every graded attempt is one FSRS review, retakes included. The first attempt creates the card. With default parameters, first intervals are Again/Hard 1 day, Good 2 days, Easy 8 days.
+- Times are normalized to UTC (fsrs rejects other zones).
+- Failing in the moment is handled by remediation (§4.8), not by short FSRS steps.
+**Alternatives:**
+- Library defaults: these flood the due list.
+- Scheduling only once a concept is solid: this throws away the evidence from weak attempts, which FSRS handles natively as Again/Hard.
+- Fuzzing on: tests become nondeterministic, with no benefit at ≤ 20 concepts per course.
+**Consequences:** Reviews start at least a day out. Default FSRS parameters stay until the P2 optimizer, which needs review logs we don't store yet.
+**One-liner:** Spaced review is measured in days; same-day failure is remediation's job.
+
+## ADR-0019: Redis search indexes live on DB 0; tests that need one use a `test:` prefix there
+**Context:** The Redis 8 Query Engine refuses indexes on any other logical DB (`Cannot create index on db != 0`). The tests isolate Redis on DB 15 (ADR-0010). `idx:llm_exact` needs an index now, and the CP3 semantic cache needs a vector index.
+**Decision:**
+- Data keys stay where they are. The exact cache's `JSON.GET`/`JSON.SET` work on any DB.
+- `ensure_index` creates an index only on DB 0, and skips with a warning elsewhere. The cache still works there; only the inventory index is missing.
+- A test that needs a real index uses DB 0 with a unique `test:` index name and key prefix, and drops it (with its documents) afterwards.
+**Alternatives:**
+- Moving all tests to DB 0 under a namespace: every key would need a prefix, and flushing a whole DB would no longer be safe.
+- Faking the Query Engine: it would prove nothing about the real index.
+**Consequences:** API tests run without `idx:llm_exact`. CP3's RedisVL tests follow the same DB-0, `test:`-prefix pattern.
+**One-liner:** Keys can live anywhere; indexes only on DB 0, so index tests borrow DB 0 under a throwaway prefix.
+
+## ADR-0020: SSE through the Next proxy: `Cache-Control: no-transform`
+**Context:** The lesson streams as SSE from FastAPI through Next's `/api` rewrite. Measured live, a browser-like client (`Accept-Encoding: gzip`) received all 332 events in one burst at 13 s. Without gzip, the same request through Next streamed: the first event at 1.5 s, 286 distinct arrival times. The rewrite streams; Next's response compression buffers.
+**Decision:** The SSE route sends `Cache-Control: no-transform` (alongside FastAPI's `no-cache`), set in a dependency so it's there before the headers go out. Next's compression skips responses marked `no-transform`. A regression test asserts the header.
+**Alternatives:**
+- `compress: false` in `next.config`: turns compression off for every page.
+- Calling FastAPI directly for this endpoint (the build plan's fallback): cross-origin cookies and CORS for one route.
+**Consequences:** Lesson events arrive as they're written (first text ~1.3 s, the full lesson ~12 s), and every other response is still compressed. Any future streaming endpoint must send the same header.
+**One-liner:** The proxy wasn't the problem, gzip was; `no-transform` opts the stream out of it.
+
+## ADR-0021: Two quiz calls: a shareable, exact-cached `design` and a never-cached `design_targeted`
+**Context:** ADR-0007 says quizzes are exact-cached on the lesson's content, and also that any request carrying a learner's logged misconceptions is never cached. §4.6 wants distractors drawn from *this learner's* misconceptions, so after a miss, the next quiz is personal. A retake of the same lesson must also not return the same questions.
+**Decision:**
+- `design-assessment` has two calls. `design` (cache `exact`) takes the concept, the lesson's text and a `round` number, with no learner data. `design_targeted` (cache `never`) adds the open misconceptions for the concept and its prereqs, and a validator requires at least one question to target one of them.
+- The service picks the call: any open misconception → `design_targeted`. The cache policy stays declared per call in `SKILL.md`, not decided in code.
+- `round` (prior submitted attempts + 1) is part of the input, so a retake is a new quiz while round 1 of a shared lesson stays an exact hit across learners.
+**Alternatives:**
+- One call with a code-side "skip the cache if personal" flag: hides the policy from the skill's declaration, which is what reviewers and the trace read.
+- Never caching quizzes: about 3.5¢ and 20 s per quiz for every learner, including the ones a shared lesson already served.
+**Consequences:** A learner with no logged beliefs gets a shared quiz. After any miss, quizzes are personal and slower. The quiz is prefetched while the learner reads the lesson, to hide the ~20 s.
+**One-liner:** The quiz is shared until you've shown a misconception; then it's yours and never cached.
+
+## ADR-0022: Remediation is an inserted prerequisite; only structural changes version the plan
+**Context:** §4.8 inserts a remediation concept after a score of 1–2 and says every plan change creates a new version. We have to decide where the remediation goes, how the learner gets back to the original, and which events count as "plan changes" (unlocking happens after almost every quiz).
+**Decision:**
+- The remediation concept (`{id}-remedy-{n}`) is inserted **before** the failed concept, takes its prereqs, and becomes a new prereq of it. The existing gate then does the rest: the remedy unlocks, the original re-locks, and when the remedy is solid the original reopens for a retake. `pedagogy.adapt` caps remediations at 2 per concept (`MAX_REMEDIATIONS`); after that a low score asks for a retake (no endless loops).
+- A remediation for an overridden concept inherits the override: it would otherwise take the concept's unmet prereqs and sit locked behind the gate the learner already skipped.
+- Plan-state fields set by code (`Concept.remedy`, `ConceptMap.test_out`) are hidden from the model's output schema (`SkipJsonSchema`), so `map-concepts` can't set them.
+- New plan versions only for **structural** changes: an inserted remediation, an accepted test-out, an override. Unlocks and completions are progress state, reported in the result and the diff's `status_changes`, not versions of their own.
+- A picked MCQ distractor logs its tagged misconception deterministically. The grader adds one from the short answer, and that one is listed first.
+**Alternatives:**
+- Remediation as a detour outside the graph: needs a second gating mechanism.
+- A version per unlock: the history fills with noise, and the "why" loses its meaning.
+**Consequences:** One gating rule covers prereqs, remediation and the retake loop. The plan history reads as decisions (diagnosis, remediation, test-out, override).
+**One-liner:** A remediation is just a new prerequisite, so the gate we already trust does the re-locking.

@@ -90,3 +90,37 @@ def test_skills_endpoint(client) -> None:
     diagnose = next(s for s in skills if s["name"] == "diagnose")
     assert {c["name"] for c in diagnose["calls"]} == {"probe", "assess"}
     assert all(c["cache"] == "never" for c in diagnose["calls"])
+
+
+def test_teach_concept_loads() -> None:
+    from agent.types import LessonOutput, TeachInput
+
+    reg = Registry()
+    teach = reg.call("teach-concept", "teach")
+    assert teach.spec.cache == "semantic" and teach.spec.stream
+    assert (teach.input_model, teach.output_model) == (TeachInput, LessonOutput)
+    version = reg.prompt_version("teach-concept", "teach")
+    print(f"\nteach-concept.teach prompt_version = {version}")
+    assert re.fullmatch(r"teach-concept@\d+\.\d+\.\d+\+[0-9a-f]{8}", version)
+
+
+def test_cp2_learning_skills_load_with_the_right_cache_policy() -> None:
+    """ADR-0007: only the shareable quiz is cached; anything personal is `never`."""
+    reg = Registry()
+    policies = {
+        (s, c): reg.call(s, c).spec.cache
+        for s, c in [
+            ("design-assessment", "design"),
+            ("design-assessment", "design_targeted"),
+            ("grade", "grade"),
+            ("remediate", "explain_change"),
+            ("remediate", "prereq_warning"),
+            ("remediate", "lesson"),
+        ]
+    }
+    assert policies.pop(("design-assessment", "design")) == "exact"
+    assert set(policies.values()) == {"never"}
+    assert reg.call("remediate", "lesson").spec.stream
+    for skill in ("design-assessment", "grade", "remediate"):
+        call = next(iter(reg.skills[skill].calls))
+        print(f"\n{skill}.{call} prompt_version = {reg.prompt_version(skill, call)}")

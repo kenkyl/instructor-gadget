@@ -306,7 +306,7 @@ An organization whose courses can be grounded in its own docs and assigned to it
 | Read | Org admin pages, grounding, semantic-cache bucket (`org_id`) | By id or slug |
 
 ```json
-{ "id": "8f1c…a001", "name": "Acme Payments", "slug": "acme", "created_at": "2026-10-11T07:00:00Z" }
+{ "id": "8f1c…a001", "name": "Acme AI", "slug": "acme", "created_at": "2026-10-11T07:00:00Z" }
 ```
 
 #### `users` ✅
@@ -325,7 +325,7 @@ A person who can log in. Phase 1 has seeded users only; Google sign-in is planne
 | Read | Login (🔜 PC0.5), `get_current_user` on every request (resolved from the session) | By id or username |
 
 ```json
-{ "id": "2b7e…b002", "username": "dana", "display_name": "Dana (new SRE at Acme)" }
+{ "id": "2b7e…b002", "username": "dana", "display_name": "Dana (new backend engineer at Acme AI)" }
 ```
 
 #### `memberships` ✅
@@ -379,7 +379,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 ```json
 {
   "id": "c0de…c001", "scope": "org", "owner_user_id": null, "org_id": "8f1c…a001",
-  "created_by": "5a9d…b003", "title": "On-call readiness at Acme Payments",
+  "created_by": "5a9d…b003", "title": "Technical readiness at Acme AI",
   "config": { "topic": "On-call readiness", "target_hours": 3, "target_level": "intermediate",
               "self_level": "intermediate", "formats": ["reading", "quizzes", "hands_on"] },
   "mission": { "goal": "Handle a first on-call shift alone", "expert_means": "Can triage a checkout 5xx spike",
@@ -466,16 +466,18 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 
 | Operation | When | How |
 |---|---|---|
-| Write | Accept (✔︎ PC1.4: v1, `diagnosis`, the accepted map); org assignment (v1, `assignment`); quiz-driven adaptation; prerequisite override; P2 chat (`user_request`) | Insert-only, in the same transaction as the `enrollments.current_plan_version` update |
+| Write | Accept (✔︎ PC1.4: v1, `diagnosis`, the accepted map); org assignment (v1, `assignment`); ✔︎ PC2.5–2.6: an inserted remediation (`quiz_result`, rule `insert_remediation`, reason from `remediate.explain_change`), an accepted test-out (`quiz_result`, `offer_test_out`), an override (`prereq_override`). Only structural changes are versions; unlocks are progress (ADR-0022); P2 chat (`user_request`) | Insert-only, in the same transaction as the `enrollments.current_plan_version` update |
 | Update | Never | Versions are immutable |
-| Read | Learning loop (current version); plan history and diff UI (🔜 PC2.5) | Latest version, or a specific one |
+| Read | Learning loop (current version); plan history and diff UI (✔︎ PC2.5, `GET …/plans`, newest first) | Latest version, or a specific one |
 
 ```json
 { "version": 2, "trigger": "quiz_result", "rule": "insert_remediation",
   "reason": "You scored 2 on 'Liveness vs readiness'. You believe a liveness failure removes the pod from the load balancer; it restarts the container instead. Added a short concept that attacks that from a different angle.",
-  "diff": { "added": [{ "id": "liveness-vs-readiness--remedy-1", "title": "What actually happens when a probe fails" }],
-            "removed": [], "prereq_changes": [{ "concept_id": "liveness-vs-readiness", "added": ["liveness-vs-readiness--remedy-1"], "removed": [] }],
-            "status_changes": [{ "concept_id": "liveness-vs-readiness", "from": "in_progress", "to": "locked" }] } }
+  "diff": { "added": [{ "id": "liveness-vs-readiness-remedy-1", "title": "What actually happens when a probe fails", "remedy": { "for_concept": "liveness-vs-readiness", "angle": "…", "misconception": { "label": "…", "note": "…" } } }],
+            "removed": [], "prereq_changes": [{ "concept_id": "liveness-vs-readiness", "added": ["liveness-vs-readiness-remedy-1"], "removed": [] }],
+            "status_changes": [{ "concept_id": "liveness-vs-readiness-remedy-1", "old": "locked", "new": "unlocked" },
+                               { "concept_id": "liveness-vs-readiness", "old": "in_progress", "new": "locked" }],
+            "test_out": [] } }
 ```
 
 ### 4.3 Learner model
@@ -493,20 +495,20 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 | `last_score` | smallint | yes | 1–4 (combined: the lower of the multiple-choice and short-answer scores) |
 | `attempts` | int | no | Graded attempts so far |
 | `last_attempt_at` | timestamptz | yes | |
-| `fsrs_card` | jsonb | yes | Serialized `fsrs.Card` (§5.5) |
+| `fsrs_card` | jsonb | yes | Serialized `fsrs.Card` (§5.5); null until the first graded attempt |
 | `due` | timestamptz | yes | Next review date, from FSRS |
 
 | Operation | When | How |
 |---|---|---|
 | Write | Plan accepted (✔︎ PC1.4) or assigned (🔜 PC4.3): one row per concept (`locked`, or `unlocked` if it has no prereqs: `pedagogy.initially_unlocked`) | Bulk insert, same transaction as the enrollment |
-| Update | Quiz graded (🔜 PC2.4–2.5): `mastery`, `band`, `last_score`, `attempts`, `fsrs_card`, `due`; dependents unlock when every prereq is solid or better | Values computed by the pure functions in `pedagogy.py`; the service writes them |
+| Update | Quiz graded (✔︎ PC2.4–2.5): `mastery`, `band`, `last_score`, `attempts`, `fsrs_card`, `due`; `complete` at solid or better; the gate is recomputed (locked → unlocked when every prereq is solid; an open concept re-locks when a remediation is inserted before it, unless overridden). Override (✔︎ PC2.6): locked → unlocked. A remediation concept gets its own row when inserted | Values computed by the pure functions in `pedagogy.py`; the service writes them (`app/services/quiz.py`) |
 | Read | Unlock gate before opening a concept; dashboard mastery bands and due count; quiz distractor targeting | By enrollment; `due <= now()` for the review count |
 
 | concept_id | status | mastery | band | last_score | attempts | due |
 |---|---|---|---|---|---|---|
 | `incident-roles` | complete | 0.80 | solid | 3 | 1 | 2026-10-14 |
 | `liveness-vs-readiness` | locked | 0.50 | learning | 2 | 1 | 2026-10-12 |
-| `liveness-vs-readiness--remedy-1` | unlocked | null | null | null | 0 | null |
+| `liveness-vs-readiness-remedy-1` | unlocked | null | null | null | 0 | null |
 
 #### `misconceptions` ✅
 A specific wrong belief named by the grader and logged for later quizzes, which target it with distractors (spec §4.6–4.7).
@@ -525,7 +527,7 @@ A specific wrong belief named by the grader and logged for later quizzes, which 
 
 | Operation | When | How |
 |---|---|---|
-| Write | `grade` names a misconception (🔜 PC2.4) | Insert |
+| Write | Quiz submitted (✔︎ PC2.4): one row per distinct belief shown, from each picked distractor's tag (deterministic) and from `grade` (the short answer; listed first) | Insert, deduplicated by label within the attempt |
 | Update | P2: set `resolved_at` when later attempts on it come back clean | |
 | Read | `design-assessment` (distractors), `teach-concept` for remediation, `remediate` (the "why") | Open ones (`resolved_at IS NULL`) by enrollment and concept. **Any request that includes these bypasses the cache** (ADR-0007) |
 
@@ -544,12 +546,12 @@ A logged choice to open a locked concept after seeing a specific warning (spec �
 | `enrollment_id` | uuid | no | FK → enrollments |
 | `concept_id` | varchar(100) | no | The locked concept that was opened |
 | `unmet_prereqs` | jsonb | no | Concept ids that weren't yet solid |
-| `warning` | text | no | Exactly what we told them would break (from `remediate.prereq_warning`) |
+| `warning` | text | no | What the learner was shown and confirmed (from `remediate.prereq_warning`, echoed back by the client on confirm) |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Learner confirms an override (🔜 PC2.6) | Insert, plus a new `plan_versions` row (`prereq_override`) |
+| Write | Learner confirms an override (✔︎ PC2.6: `GET …/override` shows the warning, `POST …/override` confirms) | Insert, plus a new `plan_versions` row (`prereq_override`) |
 | Read | Plan history; P2 analytics (do overrides predict low scores?) | By enrollment |
 
 ```json
@@ -573,8 +575,8 @@ Self-contained HTML/JS simulators. They **only** render in a sandboxed iframe (`
 
 | Operation | When | How |
 |---|---|---|
-| Write | Seeded once (🔜 PC2.3); live generation via `build-prototype` (P1+) | Insert / upsert on `slug` |
-| Read | A lesson for a hands-on learner references one (`lessons.prototype_id`) | By id |
+| Write | Seeded by `make seed` from `backend/seed/prototypes/<slug>.html` (✔︎ PC2.3); live generation via `build-prototype` (P1+) | Upsert on `slug` |
+| Read | A lesson for a hands-on learner whose concept matches (`app/services/prototypes.py`: a rule on the concept's own words) stores `lessons.prototype_id`; the lesson view returns the HTML | By id |
 
 ```json
 { "slug": "conn-pool-sim", "concept_type": "systems", "title": "Connection-pool exhaustion simulator",
@@ -592,20 +594,20 @@ Generated lesson content for one concept in one enrollment, stored **surface-neu
 | `plan_version` | int | no | The plan version it was generated under |
 | `kind` | varchar(32) | no | `core` \| `remediation` |
 | `content` | jsonb | no | `LessonOutput` (§5.4) |
-| `prototype_id` | uuid | yes | FK → prototypes |
+| `prototype_id` | uuid | yes | FK → prototypes; set at generation for hands-on learners when the concept matches a seeded prototype |
 | `cache_result` | varchar(32) | no | `miss` \| `exact_hit` \| `semantic_hit` \| `bypass` |
-| `cache_key` | varchar(128) | yes | The exact-tier key, or the semantic entry id it came from |
+| `cache_key` | varchar(128) | yes | The exact-tier key (`llm:exact:…`, set on a miss too), or the semantic entry id it came from (CP3) |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Concept opened for the first time, after the stream completes (🔜 PC2.2) | Insert the validated `LessonOutput` |
+| Write | Concept opened for the first time, after the stream completes (✔︎ PC2.2, `POST /api/enrollments/{id}/concepts/{cid}/lesson`). Also moves `concept_progress.status` unlocked → in_progress and invalidates the dashboard. Remediation concepts (✔︎ PC2.5) get `kind = remediation`, written by `remediate.lesson` (never cached) | Insert the validated `LessonOutput`; if two tabs raced, the first stored lesson wins. A stream the client abandons is not stored (or cached) |
 | Read | Reopening a concept (no regeneration); `design-assessment` input; walkthrough and history | Latest by `(enrollment_id, concept_id)` |
 
 ```json
 { "concept_id": "liveness-vs-readiness", "kind": "core", "cache_result": "semantic_hit",
   "content": { "explanation_md": "Counterintuitive part first: a failing **readiness** probe never restarts anything…",
-               "example_md": "During Acme's checkout deploy…",
+               "example_md": "During Acme AI's inference-gateway deploy…",
                "diagram_mermaid": "flowchart LR\n  P[Pod] -->|readiness fails| S[Removed from Service]\n  P -->|liveness fails| R[Container restarted]",
                "citations": [{ "doc": "on-call-runbook", "section": "health-checks" }], "not_in_docs": [] } }
 ```
@@ -625,15 +627,15 @@ One quiz round for a concept: the questions **with answer keys**, which stay on 
 | `mcq_score` | smallint | yes | Mapped 1–4 (4/4 → 4, 3/4 → 3, 2/4 → 2, 0–1 → 1) |
 | `short_score` | smallint | yes | 1–4 from the LLM grader; a 4 requires transfer |
 | `score_1_4` | smallint | yes | **Combined: the lower of the two** |
-| `feedback` | jsonb | yes | Per-question feedback that names the error |
+| `feedback` | jsonb | yes | The whole graded result (`QuizResult` in `app/services/quiz.py`): per-question results with the revealed key and the picked distractor's belief, the grader's feedback, mastery, band, due, the rule, the "why", the diff and any test-out offer. `GET …/quiz-attempts/{id}` returns it without re-grading |
 | `misconceptions_named` | jsonb | yes | Labels logged to `misconceptions` |
 | `created_at` | timestamptz | no | |
 | `submitted_at` | timestamptz | yes | Null until submitted |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Learner requests the quiz (🔜 PC2.4) | Insert with `questions`; the API response strips the answer keys |
-| Update | Answers submitted | Set `answers`, scores, `feedback`, `submitted_at`; then update `concept_progress` |
+| Write | Learner requests the quiz (✔︎ PC2.4, `POST …/concepts/{cid}/quiz`, get-or-create: an unsubmitted attempt is returned again; the lesson page prefetches it) | Insert with `questions`; the API response strips answer keys, distractor tags and the rubric |
+| Update | Answers submitted (✔︎ PC2.4, `POST …/quiz-attempts/{id}/submit`) | Row-locked (`FOR UPDATE`) so a double submit grades once; set `answers`, scores, `feedback`, `submitted_at`; update `concept_progress` in the same transaction |
 | Read | Results page; grader calibration and evals (CP5) | By id |
 
 ```json
@@ -658,11 +660,11 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Seed (the 4 Acme docs) or admin upload (🔜 PC4.1) | Insert; sections and hash computed on write |
+| Write | Seed (the 4 Acme AI docs) or admin upload (🔜 PC4.1) | Insert; sections and hash computed on write |
 | Read | Grounded generation (the `ground-in-sources` skill composes them into prompts); citation checks in evals | By `course.doc_ids` |
 
 ```json
-{ "slug": "postmortem-pool-exhaustion", "title": "Postmortem: payments-svc connection-pool exhaustion",
+{ "slug": "postmortem-pool-exhaustion", "title": "Postmortem: model-router connection-pool exhaustion",
   "sections": [{ "anchor": "timeline", "heading": "Timeline" }, { "anchor": "root-cause", "heading": "Root cause" }],
   "content_hash": "9c1e…44" }
 ```
@@ -735,13 +737,15 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | | `est_minutes` | int (5–120) | Total within ±15% of `target_hours` |
 | | `concept_type` | algorithm \| systems \| math \| syntax \| api \| conceptual | Determines the prototype style |
 | | `cites` | list[{doc, section}] | Grounded courses only (🔜 CP4) |
-| | `kind` | core \| remediation | Set by code, not the model (🔜 PC2.5; absent means core) |
-| ConceptMap | `concepts` | list[Concept] (1–20 stored; **6–12 when generated**, `MapOutput`) | Ids unique kebab-case slugs. Defined in `agent/types.py` (the skill folder isn't importable) |
+| | `remedy` | {for_concept, angle, misconception} \| null | ✔︎ PC2.5. Set by code on an inserted remediation concept (ADR-0022); hidden from the model's output schema (`SkipJsonSchema`). Null means a core concept |
+| ConceptMap | `concepts` | list[Concept] (1–40 stored: up to 20 core plus inserted remediations; **6–12 when generated**, `MapOutput`) | Ids unique kebab-case slugs. Defined in `agent/types.py` (the skill folder isn't importable) |
 | | `sequence` | list[str] | Every concept id once, each after its prereqs (validated in `plan.py`) |
 | | `sequence_rationale` | str | Shown to the learner |
+| | `test_out` | list[str] | ✔︎ PC2.6. Concepts the learner chose to test out of (ADR-0006); set by code, hidden from the model's schema |
 | PlanDiff | `added` / `removed` | list[Concept] / list[str] | |
 | | `prereq_changes` | list[{concept_id, added[], removed[]}] | |
-| | `status_changes` | list[{concept_id, from, to}] | |
+| | `status_changes` | list[{concept_id, old, new}] | ConceptStatus values |
+| | `test_out` | list[str] | Concepts whose lesson is skipped for the quiz |
 
 ### 5.3 `ProbeOutput` and `AssessOutput` (stored in `assessments.probe` and `.result`)
 
@@ -763,18 +767,24 @@ These shapes live inside Postgres JSONB columns. They're validated by Pydantic v
 | | `diagram_mermaid` | str | Structure or flow |
 | | `citations` | list[{doc, section}] | Required for claims drawn from org docs |
 | | `not_in_docs` | list[str] | Topics flagged "This isn't covered in your docs" |
-| QuizOutput | `questions` | list[Question] (exactly 4 multiple choice) | Transfer situations, one idea per question |
-| | `explain_item` | Question (short answer) | Required; graded on the 1–4 rubric |
-| Question | `id`, `type` (mcq \| short), `prompt` | | |
-| | `options` | list[{id, text, misconception}] | Exactly one option without a misconception (the correct one); every distractor is tagged |
-| | `answer` | str | **Server-side only** |
+| | (validator) | | `diagram_mermaid` must be bare Mermaid (no ``` fences) starting with flowchart, graph, sequenceDiagram, stateDiagram-v2 or classDiagram, with no `click` directives; a violation earns the one re-ask |
+| TeachInput | `topic`, `target_level`, `analogy_domain`, `formats` (sorted), `concept`, `prereq_titles` | | The `teach-concept` input: **no learner ids, assessment or misconceptions**, so it's shareable and its exact-cache key matches across learners in the same bucket (ADR-0007) |
+| QuizOutput | `questions` | list[MCQ] (exactly 4, ids `q1`–`q4`) | Transfer situations, one idea per question. Validators: at least one question at the concept's objective level; for `design_targeted`, at least one targets a logged misconception (ADR-0021) |
+| | `explain_item` | ShortItem | Required in the quiz; the learner may leave it blank (then only the MCQ score counts) |
+| MCQ | `id`, `prompt` | | The prompt is self-contained: the learner sees only it and the option texts |
+| | `options` | list[{id a–d, text, misconception: Misbelief \| null}] | Exactly the correct option has a null misconception (validator); every distractor is tagged |
+| | `answer` | a–d | **Server-side only** |
 | | `transfer_situation`, `objective_level` | str, Bloom level | |
-| | `rubric` | {1..4: str} | Short answers |
-| | `targets_logged_misconception` | str \| null | |
+| | `targets_logged_misconception` | str \| null | A logged misconception's label |
+| ShortItem | `id` ("explain"), `prompt`, `transfer_situation` | | |
+| | `rubric` | {score_1..score_4: str} | **Server-side only** (a hint otherwise) |
+| Misbelief | `label`, `note` | str (≤120), str | A distractor's belief or the grader's finding; logged to `misconceptions` |
+| QuizInput | `topic`, `target_level`, `concept`, `lesson` ({explanation_md, example_md} \| null for test-out), `round` | | `design` input, exact-cached; `TargetedQuizInput` adds `misconceptions` (never cached) |
+| GradeOutput | `transfer_handled`, `score` 1–4, `feedback`, `misconception` | | Validator: a 4 requires `transfer_handled` (§4.7). Not stored as such: folded into `quiz_attempts.feedback` |
 
 ### 5.5 FSRS card (stored in `concept_progress.fsrs_card`)
 
-The `fsrs` package (Free Spaced Repetition Scheduler, v6) is serialized with `Card.to_dict()` and restored with `Card.from_dict()`. The rating map is 1 → Again, 2 → Hard, 3 → Good, 4 → Easy.
+The `fsrs` package (Free Spaced Repetition Scheduler, v6) is serialized with `Card.to_dict()` and restored with `Card.from_dict()`. The rating map is 1 → Again, 2 → Hard, 3 → Good, 4 → Easy. The card is created on the first graded attempt (`fsrs_card` and `due` are null until then), and every graded attempt is one review via `pedagogy.schedule_review` (day-scale scheduler, ADR-0018). Reads go through `pedagogy.load_card`, which validates the shape (fsrs `CardDict`) before rebuilding the card.
 
 ```json
 { "card_id": 1760166000123, "state": 2, "step": null, "stability": 3.17, "difficulty": 5.28,
@@ -791,7 +801,7 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 |---|---|---|---|---|---|---|
 | `sess:{token}` | **hash** | 8 h (`SESSION_TTL_SECONDS`) | Login (`HSET` + `EXPIRE`) | `get_current_user` on every request (`HGETALL`) | Logout (`DEL`) or expiry | ✅ PC0.5 |
 | `dash:{user_id}` | **JSON** (native) | 10 min (`DASHBOARD_TTL_SECONDS`) | Warmed at login; refilled on a cache miss (cache-aside), `JSON.SET` | `GET /api/dashboard` (`JSON.GET`) | `DEL` on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | ✅ PC0.5 |
-| `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | 🔜 PC2.2 |
+| `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET` + `EXPIRE` in one `MULTI`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | ✅ PC2.2 (`agent/cache.py`) |
 | `llmcache_semantic` (RedisVL `SemanticCache` index) | hash + vector index | 7 days per entry | After a successful `teach-concept` generation | `teach-concept` on an exact miss (tier 2, nearest neighbour within a distance threshold, **filtered by bucket tags**) | Prompt-version tag mismatch; TTL | 🔜 PC3.1 |
 
 **Why these types (ADR-0011):**
@@ -807,7 +817,7 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 |---|---|
 | `user_id` | `2b7e…b002` |
 | `username` | `dana` |
-| `display_name` | `Dana (new SRE at Acme)` |
+| `display_name` | `Dana (new backend engineer at Acme AI)` |
 | `created_at` | `2026-10-11T09:00:00Z` |
 
 - **Writes are atomic:** `HSET` and `EXPIRE` run in one `MULTI/EXEC` pipeline, so a session never exists without its TTL. The same applies to `JSON.SET` + `EXPIRE` for the dashboard.
@@ -818,7 +828,7 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, return. Writes go to Postgres and then **delete** the key; the next read refills it. We delete rather than patching paths in place: patching could drift from Postgres if two writers race. Native JSON still lets a client read one path, e.g. `JSON.GET dash:{id} $.courses[*].due_count`.
 
 ```json
-{ "courses": [{ "enrollment_id": "e001…0001", "title": "On-call readiness at Acme Payments", "scope": "org",
+{ "courses": [{ "enrollment_id": "e001…0001", "title": "Technical readiness at Acme AI", "scope": "org",
                 "progress": 0.4, "bands": { "solid": 2, "learning": 1, "shaky": 1, "locked": 4 },
                 "due_count": 1, "badge": null }] }
 ```
@@ -833,7 +843,8 @@ Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, re
     "created_at": 1791709200, "hits": 3, "output": { "…": "validated output" } }
   ```
   The original `cost_usd` and `latency_ms` produce `llm_calls.saved_*` on a later hit. `hits` is incremented atomically (`JSON.NUMINCRBY`), with no read-modify-write.
-- **Index `idx:llm_exact`** (`FT.CREATE … ON JSON PREFIX 1 llm:exact:`):
+- **Redis errors never fail a call:** a failed lookup is a miss, and a failed write is skipped (logged). An entry that fails `ExactEntry` validation is a miss.
+- **Index `idx:llm_exact`** (`FT.CREATE … ON JSON PREFIX 1 llm:exact:`), created at startup by `ensure_index`, **on DB 0 only** (the Query Engine refuses other DBs; ADR-0019):
 
 | Field (JSONPath) | Type | Used for |
 |---|---|---|
@@ -870,7 +881,7 @@ All enums are `StrEnum`s stored as `VARCHAR(32)` (ADR-0010).
 | `EnrollmentStatus` | active, complete | enrollments.status |
 | `PlanTrigger` | diagnosis, assignment, quiz_result, prereq_override, user_request | plan_versions.trigger |
 | `ConceptStatus` | locked, unlocked, in_progress, complete | concept_progress.status |
-| `Band` | shaky, learning, solid, mastered | concept_progress.band |
+| `Band` | shaky, learning, solid, mastered | concept_progress.band (defined in `agent/types.py`: pedagogy owns it; `pedagogy.band()` sets it) |
 | `LessonKind` | core, remediation | lessons.kind |
 | `CacheResult` | miss, exact_hit, semantic_hit, bypass | lessons.cache_result, llm_calls.cache_result |
 | `CallStatus` | ok, error | llm_calls.status |

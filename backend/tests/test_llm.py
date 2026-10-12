@@ -1,6 +1,7 @@
 """The LLM client wrapper: structured output, one retry with the errors, every request logged."""
 
 import asyncio
+import uuid
 
 import anthropic
 import httpx2
@@ -224,3 +225,120 @@ def test_assess_output_is_checked_against_its_input(bad: dict, error: str) -> No
 def test_stored_results_validate_without_context() -> None:
     # Reading JSONB back has no input to compare against; only the self-contained rules run.
     AssessOutput.model_validate(assessed(claimed_level="novice", assessed_level="novice"))
+
+
+# --- streaming + the exact cache (PC2.2) -------------------------------------------------------
+from redis.asyncio import Redis  # noqa: E402
+
+from agent.cache import ExactCache  # noqa: E402
+from agent.llm import Done, Restart, TextDelta  # noqa: E402
+from agent.types import Concept, LessonOutput, TeachInput  # noqa: E402
+from app.config import get_settings  # noqa: E402
+
+GOOD_LESSON = {
+    "explanation_md": "A pool's max isn't a target, it's a ceiling.",
+    "example_md": "Set max=10 and send 50 concurrent requests: 40 wait.",
+    "diagram_mermaid": "flowchart LR\n  R[Requests] --> P[Pool max 10] --> D[(DB)]",
+}
+
+
+def teach_in(topic: str = "Database connection pooling") -> TeachInput:
+    return TeachInput(
+        topic=topic,
+        target_level="intermediate",
+        analogy_domain="restaurants",
+        formats=["quizzes", "reading"],
+        concept=Concept(
+            id="pool-exhaustion",
+            title="Pool exhaustion",
+            mastery_statement="You can diagnose a timeout caused by pool exhaustion.",
+            objective_level="analyze",
+            prereqs=[],
+            est_minutes=20,
+            concept_type="systems",
+        ),
+        prereq_titles=[],
+    )
+
+
+async def acollect(llm: LLMClient, payload: TeachInput) -> list:
+    events = llm.stream("teach-concept", "teach", payload, LessonOutput, ctx=CallContext())
+    return [e async for e in events]
+
+
+def collect(llm: LLMClient, payload: TeachInput) -> list:
+    return asyncio.run(acollect(llm, payload))
+
+
+def with_cached_llm(fake: FakeAnthropic, fn):
+    """Run `fn(llm, sink)` in one event loop, with a real exact cache on the test Redis DB."""
+
+    async def go():
+        redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
+        sink = MemorySink()
+        llm = LLMClient(
+            fake.as_client(),
+            get_registry(),
+            sink,
+            model="claude-sonnet-5-5",
+            cache=ExactCache(redis),
+        )
+        try:
+            return await fn(llm, sink)
+        finally:
+            await redis.aclose()
+
+    return asyncio.run(go())
+
+
+def test_stream_yields_the_json_then_done() -> None:
+    llm, sink = make(FakeAnthropic(message(GOOD_LESSON)))
+    events = collect(llm, teach_in())
+    text = "".join(e.text for e in events if isinstance(e, TextDelta))
+    assert len(events) > 3 and isinstance(events[-1], Done)
+    assert LessonOutput.model_validate_json(text) == events[-1].output
+    assert events[-1].cache_result == "miss"  # cacheable call, no cache configured
+    assert [r.status for r in sink.records] == ["ok"]
+
+
+def test_stream_restarts_after_invalid_output() -> None:
+    bad = GOOD_LESSON | {"diagram_mermaid": "```mermaid\nflowchart LR\n  A --> B\n```"}
+    fake = FakeAnthropic(message(bad), message(GOOD_LESSON))
+    llm, sink = make(fake)
+    events = collect(llm, teach_in())
+    [restart] = [e for e in events if isinstance(e, Restart)]
+    assert "fences" in restart.errors
+    assert isinstance(events[-1], Done) and len(fake.requests) == 2
+    assert [r.status for r in sink.records] == ["error", "ok"]
+
+
+def test_cache_miss_stores_then_hit_skips_the_model() -> None:
+    fake = FakeAnthropic(message(GOOD_LESSON, input_tokens=2000, output_tokens=1000))
+    payload = teach_in(topic=f"pooling {uuid.uuid4().hex}")  # a fresh key
+
+    async def go(llm: LLMClient, sink: MemorySink):
+        first = (await acollect(llm, payload))[-1]
+        second = await acollect(llm, payload)  # no reply left: a model call would fail
+        return first, second, sink.records
+
+    first, second, records = with_cached_llm(fake, go)
+    assert first.cache_result == "miss" and first.cache_key.startswith("llm:exact:")
+    assert len(second) == 1 and second[0].cache_result == "exact_hit"
+    assert second[0].output == first.output and len(fake.requests) == 1
+    miss, hit = records
+    assert (miss.cache_result, miss.cache_key) == ("miss", first.cache_key)
+    assert (hit.cache_result, hit.input_tokens, hit.est_cost_usd) == ("exact_hit", 0, 0.0)
+    assert hit.saved_cost_usd == miss.est_cost_usd > 0  # measured, not estimated
+
+
+def test_never_cached_calls_skip_the_cache() -> None:
+    fake = FakeAnthropic(message(GOOD_PROBE), message(GOOD_PROBE))
+
+    async def go(llm: LLMClient, sink: MemorySink):
+        for _ in range(2):
+            await llm.run("diagnose", "probe", PROBE_IN, ProbeOutput, ctx=CallContext())
+        return sink.records
+
+    records = with_cached_llm(fake, go)
+    assert len(fake.requests) == 2  # diagnose is never cached (ADR-0007)
+    assert {(r.cache_result, r.cache_key) for r in records} == {("bypass", None)}

@@ -21,7 +21,7 @@ Kyle wants a deep working understanding of every component, so understanding mat
 - Work in small **pair checkpoints (PC)**. At the end of each PC, post: **Built** / **Architecture now** (a Mermaid diagram if it changed) / **Your turn** (a targeted task against a pre-written test) / **Verify** (exact commands or clicks + expected result) / **Check** (2–3 questions) / **Next**. Then wait for "go".
 - Keep instructions short and imperative, and say why. Ask clarifying questions instead of guessing.
 - Use current best practice: check library APIs against current docs (the `claude-api` skill for Anthropic, plus the RedisVL and fsrs docs) before writing integration code.
-- **Branching:** one branch per CP (`cpN/<slug>`), with a draft PR opened at the start so CI runs on every push. Commit and push at the end of each PC (Conventional Commits). At the CP boundary, mark the PR ready and merge it with a merge commit once CI passes. `main` only ever holds finished, green checkpoints.
+- **Branching:** one branch per CP (`cpN/<slug>`), with a draft PR opened at the start so CI runs on every push. Commit and push at the end of each PC (Conventional Commits). At the CP boundary, mark the PR ready and tell Kyle once CI passes. **Kyle reviews and merges; never merge PRs yourself.** `main` only ever holds finished, green checkpoints.
 
 ## Hard rules
 - **Public repo.** Never commit `docs/private/` (personal planning material) or anything that isn't about the product and how it's built. Before every push, run the privacy scan in the `checkpoint` skill.
@@ -60,7 +60,7 @@ Filled in as they come to exist (PC0.2+).
 | `make install` | Install backend (uv) + web (npm) dependencies |
 | `make migrate` | Apply Alembic migrations to the dev DB |
 | `make migration m="..."` | Autogenerate a migration after changing `app/models.py`; always review the generated file |
-| `make seed` | Seed the sample org (Acme) + users kyle, dana, priya (idempotent) |
+| `make seed` | Seed the sample org (Acme AI) + users kyle, dana, priya (idempotent) |
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
 | `make lint` / `make fmt` | ruff + pyright + eslint + tsc / auto-format backend |

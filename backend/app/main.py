@@ -8,9 +8,10 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from agent.cache import ExactCache, ensure_index
 from agent.llm import LLMClient
 from agent.registry import get_registry
-from app.api import auth, courses, dashboard, health, skills
+from app.api import auth, courses, dashboard, health, learning, skills
 from app.config import get_settings
 from app.services.llm_log import DbCallSink
 
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     app.state.sessionmaker = async_sessionmaker(app.state.engine, expire_on_commit=False)
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    await ensure_index(app.state.redis)  # idx:llm_exact (exact LLM cache inventory)
     # No key (e.g. CI): the app still starts; LLM endpoints answer 503 via get_llm.
     anthropic_client: AsyncAnthropic | None = None
     app.state.llm = None
@@ -36,6 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             registry,
             DbCallSink(app.state.sessionmaker),
             model=settings.anthropic_model,
+            cache=ExactCache(app.state.redis),
         )
     yield
     if anthropic_client is not None:
@@ -50,3 +53,4 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(skills.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
+app.include_router(learning.router, prefix="/api")

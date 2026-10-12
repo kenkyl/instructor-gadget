@@ -694,6 +694,714 @@
           }
         }
       }
+    },
+    "/api/enrollments/{enrollment_id}": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Enrollment",
+        "description": "The learner's plan with per-concept status and band.",
+        "operationId": "get_enrollment_api_enrollments__enrollment_id__get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/lesson": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Lesson",
+        "description": "The stored lesson, or 404 if it hasn't been generated yet (then POST to stream it).",
+        "operationId": "get_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Open Lesson",
+        "description": "Stream the lesson as SSE: `field_delta`* (`restart`)? then `done` with the stored lesson,\nor `error`. A lesson that already exists arrives as a single `done`.",
+        "operationId": "open_lesson_api_enrollments__enrollment_id__concepts__concept_id__lesson_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/plans": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Plan History",
+        "description": "Every plan version, newest first, with its trigger, rule, why and diff (spec \u00a74.8).",
+        "operationId": "get_plan_history_api_enrollments__enrollment_id__plans_get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanVersionView"
+                  },
+                  "title": "Response Get Plan History Api Enrollments  Enrollment Id  Plans Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/quiz": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Post Quiz",
+        "description": "The open quiz for this concept, or a new one (no answer keys in the response).",
+        "operationId": "post_quiz_api_enrollments__enrollment_id__concepts__concept_id__quiz_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/quiz-attempts/{attempt_id}/submit": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Post Submit",
+        "description": "Grade, update mastery and the review date, then apply the adapt rules.",
+        "operationId": "post_submit_api_enrollments__enrollment_id__quiz_attempts__attempt_id__submit_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/quiz-attempts/{attempt_id}": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Quiz Result",
+        "operationId": "get_quiz_result_api_enrollments__enrollment_id__quiz_attempts__attempt_id__get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/test-out": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Post Test Out",
+        "description": "Accept the test-out offer after a 4 (ADR-0006): a new plan version.",
+        "operationId": "post_test_out_api_enrollments__enrollment_id__concepts__concept_id__test_out_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanVersionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrollments/{enrollment_id}/concepts/{concept_id}/override": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Get Override Warning",
+        "description": "What will break if the learner opens this locked concept now (spec \u00a74.8).",
+        "operationId": "get_override_warning_api_enrollments__enrollment_id__concepts__concept_id__override_get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverrideWarning"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Post Override",
+        "description": "Open a locked concept anyway: logged, with a new plan version.",
+        "operationId": "post_override_api_enrollments__enrollment_id__concepts__concept_id__override_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Enrollment Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanVersionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -782,6 +1490,27 @@
         ],
         "title": "AssessOutput"
       },
+      "Band": {
+        "type": "string",
+        "enum": [
+          "shaky",
+          "learning",
+          "solid",
+          "mastered"
+        ],
+        "title": "Band",
+        "description": "Mastery bands (spec \u00a74.9). Stored in concept_progress.band; set by pedagogy.band()."
+      },
+      "CacheResult": {
+        "type": "string",
+        "enum": [
+          "miss",
+          "exact_hit",
+          "semantic_hit",
+          "bypass"
+        ],
+        "title": "CacheResult"
+      },
       "CallInfo": {
         "properties": {
           "name": {
@@ -814,6 +1543,24 @@
           "prompt_version"
         ],
         "title": "CallInfo"
+      },
+      "Citation": {
+        "properties": {
+          "doc": {
+            "type": "string",
+            "title": "Doc"
+          },
+          "section": {
+            "type": "string",
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc",
+          "section"
+        ],
+        "title": "Citation"
       },
       "Concept": {
         "properties": {
@@ -894,7 +1641,7 @@
               "$ref": "#/components/schemas/Concept"
             },
             "type": "array",
-            "maxItems": 20,
+            "maxItems": 40,
             "minItems": 1,
             "title": "Concepts"
           },
@@ -920,6 +1667,34 @@
         ],
         "title": "ConceptMap",
         "description": "Stored in courses.template_plan and plan_versions.plan. These graph rules hold for\nevery stored map, including after the learner cuts concepts (PC1.4)."
+      },
+      "ConceptRef": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "title"
+        ],
+        "title": "ConceptRef"
+      },
+      "ConceptStatus": {
+        "type": "string",
+        "enum": [
+          "locked",
+          "unlocked",
+          "in_progress",
+          "complete"
+        ],
+        "title": "ConceptStatus"
       },
       "CourseConfig": {
         "properties": {
@@ -1220,6 +1995,73 @@
         ],
         "title": "DashboardResponse"
       },
+      "EnrollmentDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EnrollmentStatus"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "plan_version": {
+            "type": "integer",
+            "title": "Plan Version"
+          },
+          "concept_map": {
+            "$ref": "#/components/schemas/ConceptMap"
+          },
+          "progress": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressView"
+            },
+            "type": "array",
+            "title": "Progress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "title",
+          "status",
+          "completed_at",
+          "plan_version",
+          "concept_map",
+          "progress"
+        ],
+        "title": "EnrollmentDetail"
+      },
+      "EnrollmentStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "complete"
+        ],
+        "title": "EnrollmentStatus"
+      },
       "Evidence": {
         "properties": {
           "question_id": {
@@ -1249,6 +2091,66 @@
           "points_to"
         ],
         "title": "Evidence"
+      },
+      "ExplainResult": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "transfer_handled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transfer Handled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt",
+          "answer",
+          "score",
+          "feedback",
+          "transfer_handled"
+        ],
+        "title": "ExplainResult"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1331,6 +2233,95 @@
         ],
         "title": "HealthResponse"
       },
+      "LessonKind": {
+        "type": "string",
+        "enum": [
+          "core",
+          "remediation"
+        ],
+        "title": "LessonKind"
+      },
+      "LessonOutput": {
+        "properties": {
+          "explanation_md": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Explanation Md",
+            "description": "Counterintuitive part first"
+          },
+          "example_md": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Example Md",
+            "description": "One complete worked example"
+          },
+          "diagram_mermaid": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Diagram Mermaid",
+            "description": "Mermaid source, no code fences"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "type": "array",
+            "title": "Citations",
+            "description": "Org docs only"
+          },
+          "not_in_docs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not In Docs",
+            "description": "Org docs only"
+          }
+        },
+        "type": "object",
+        "required": [
+          "explanation_md",
+          "example_md",
+          "diagram_mermaid"
+        ],
+        "title": "LessonOutput",
+        "description": "Stored in lessons.content. Field order is the streaming order the learner sees."
+      },
+      "LessonView": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LessonKind"
+          },
+          "content": {
+            "$ref": "#/components/schemas/LessonOutput"
+          },
+          "cache_result": {
+            "$ref": "#/components/schemas/CacheResult"
+          },
+          "prototype": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "kind",
+          "content",
+          "cache_result"
+        ],
+        "title": "LessonView"
+      },
       "LoginRequest": {
         "properties": {
           "username": {
@@ -1343,6 +2334,28 @@
           "username"
         ],
         "title": "LoginRequest"
+      },
+      "Misbelief": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Label",
+            "description": "Short name, e.g. 'requests = limits'"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "description": "The underlying belief in one plain sentence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "note"
+        ],
+        "title": "Misbelief",
+        "description": "A specific wrong belief (spec \u00a74.6\u20134.7): what a distractor represents, or what the grader\nfound. Logged to `misconceptions` when a learner shows it."
       },
       "Mission": {
         "properties": {
@@ -1395,6 +2408,178 @@
         "title": "Mission",
         "description": "Stored in courses.mission (JSONB): what the learner is really after (spec \u00a74.1)."
       },
+      "OverrideRequest": {
+        "properties": {
+          "warning": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Warning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "warning"
+        ],
+        "title": "OverrideRequest"
+      },
+      "OverrideWarning": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "unmet_prereqs": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptRef"
+            },
+            "type": "array",
+            "title": "Unmet Prereqs"
+          },
+          "warning": {
+            "type": "string",
+            "title": "Warning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "unmet_prereqs",
+          "warning"
+        ],
+        "title": "OverrideWarning"
+      },
+      "PlanDiff": {
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/Concept"
+            },
+            "type": "array",
+            "title": "Added"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed"
+          },
+          "prereq_changes": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqChange"
+            },
+            "type": "array",
+            "title": "Prereq Changes"
+          },
+          "status_changes": {
+            "items": {
+              "$ref": "#/components/schemas/StatusChange"
+            },
+            "type": "array",
+            "title": "Status Changes"
+          },
+          "test_out": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Test Out"
+          }
+        },
+        "type": "object",
+        "title": "PlanDiff",
+        "description": "Stored in plan_versions.diff: what changed against the previous version (spec \u00a74.8)."
+      },
+      "PlanTrigger": {
+        "type": "string",
+        "enum": [
+          "diagnosis",
+          "assignment",
+          "quiz_result",
+          "prereq_override",
+          "user_request"
+        ],
+        "title": "PlanTrigger"
+      },
+      "PlanVersionView": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/PlanTrigger"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanDiff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "trigger",
+          "rule",
+          "reason",
+          "diff",
+          "created_at"
+        ],
+        "title": "PlanVersionView"
+      },
+      "PrereqChange": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Added"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id"
+        ],
+        "title": "PrereqChange"
+      },
       "ProbeQuestionView": {
         "properties": {
           "id": {
@@ -1413,6 +2598,477 @@
         ],
         "title": "ProbeQuestionView",
         "description": "What the learner sees. `targets_concept` stays server-side: naming the concept being\nchecked is a hint (spec \u00a74.2: no hints)."
+      },
+      "ProgressView": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LessonKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConceptStatus"
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery"
+          },
+          "band": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Band"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Score"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due"
+          },
+          "has_lesson": {
+            "type": "boolean",
+            "title": "Has Lesson"
+          },
+          "test_out": {
+            "type": "boolean",
+            "title": "Test Out"
+          },
+          "overridden": {
+            "type": "boolean",
+            "title": "Overridden"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "kind",
+          "status",
+          "mastery",
+          "band",
+          "last_score",
+          "attempts",
+          "due",
+          "has_lesson",
+          "test_out",
+          "overridden"
+        ],
+        "title": "ProgressView"
+      },
+      "PrototypeView": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "html": {
+            "type": "string",
+            "title": "Html"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "html"
+        ],
+        "title": "PrototypeView"
+      },
+      "PublicOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "PublicOption"
+      },
+      "PublicQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "prompt",
+          "options"
+        ],
+        "title": "PublicQuestion"
+      },
+      "QuestionResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicOption"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "chosen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "correct": {
+            "type": "boolean",
+            "title": "Correct"
+          },
+          "misconception": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Misbelief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "prompt",
+          "options",
+          "chosen",
+          "answer",
+          "correct",
+          "misconception"
+        ],
+        "title": "QuestionResult"
+      },
+      "QuizResult": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Attempt Id"
+          },
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "concept_title": {
+            "type": "string",
+            "title": "Concept Title"
+          },
+          "mcq_correct": {
+            "type": "integer",
+            "title": "Mcq Correct"
+          },
+          "mcq_score": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Mcq Score"
+          },
+          "short_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Score"
+          },
+          "score": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Score"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionResult"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "explain": {
+            "$ref": "#/components/schemas/ExplainResult"
+          },
+          "misconceptions_named": {
+            "items": {
+              "$ref": "#/components/schemas/Misbelief"
+            },
+            "type": "array",
+            "title": "Misconceptions Named"
+          },
+          "mastery": {
+            "type": "number",
+            "title": "Mastery"
+          },
+          "band": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "due": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Due"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/Rule"
+          },
+          "why": {
+            "type": "string",
+            "title": "Why"
+          },
+          "plan_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Version"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanDiff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unlocked": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptRef"
+            },
+            "type": "array",
+            "title": "Unlocked"
+          },
+          "test_out_offer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConceptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_concept": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConceptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "course_complete": {
+            "type": "boolean",
+            "title": "Course Complete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "concept_id",
+          "concept_title",
+          "mcq_correct",
+          "mcq_score",
+          "short_score",
+          "score",
+          "questions",
+          "explain",
+          "misconceptions_named",
+          "mastery",
+          "band",
+          "due",
+          "rule",
+          "why",
+          "plan_version",
+          "diff",
+          "unlocked",
+          "test_out_offer",
+          "next_concept",
+          "course_complete"
+        ],
+        "title": "QuizResult",
+        "description": "Stored in quiz_attempts.feedback, so the results page can be reloaded."
+      },
+      "QuizView": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Attempt Id"
+          },
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "concept_title": {
+            "type": "string",
+            "title": "Concept Title"
+          },
+          "round": {
+            "type": "integer",
+            "title": "Round"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/PublicQuestion"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "explain_prompt": {
+            "type": "string",
+            "title": "Explain Prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "concept_id",
+          "concept_title",
+          "round",
+          "questions",
+          "explain_prompt"
+        ],
+        "title": "QuizView",
+        "description": "The quiz without answer keys, misconception tags or the rubric: any of those is a hint."
+      },
+      "Remedy": {
+        "properties": {
+          "for_concept": {
+            "type": "string",
+            "title": "For Concept"
+          },
+          "angle": {
+            "type": "string",
+            "title": "Angle"
+          },
+          "misconception": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Misbelief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "for_concept",
+          "angle",
+          "misconception"
+        ],
+        "title": "Remedy",
+        "description": "Set by code (never the model) on a remediation concept inserted by the adapt rules."
+      },
+      "Rule": {
+        "type": "string",
+        "enum": [
+          "offer_test_out",
+          "advance",
+          "retake",
+          "insert_remediation"
+        ],
+        "title": "Rule",
+        "description": "Which rule fired after a graded attempt. Stored in plan_versions.rule when it changes the\nplan (insert_remediation, offer_test_out once accepted)."
       },
       "SeededUser": {
         "properties": {
@@ -1467,6 +3123,47 @@
           "calls"
         ],
         "title": "SkillInfo"
+      },
+      "StatusChange": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "old": {
+            "type": "string",
+            "title": "Old"
+          },
+          "new": {
+            "type": "string",
+            "title": "New"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "old",
+          "new"
+        ],
+        "title": "StatusChange"
+      },
+      "SubmitRequest": {
+        "properties": {
+          "answers": {
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 5000
+            },
+            "type": "object",
+            "maxProperties": 10,
+            "title": "Answers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answers"
+        ],
+        "title": "SubmitRequest"
       },
       "ValidationError": {
         "properties": {

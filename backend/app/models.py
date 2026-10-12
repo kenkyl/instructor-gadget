@@ -32,6 +32,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from agent.types import Band  # a pedagogy concept; the agent package owns it
+
 # Deterministic constraint names, so Alembic autogenerate produces stable, reviewable migrations.
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -84,13 +86,6 @@ class ConceptStatus(StrEnum):
     unlocked = "unlocked"
     in_progress = "in_progress"
     complete = "complete"
-
-
-class Band(StrEnum):
-    shaky = "shaky"
-    learning = "learning"
-    solid = "solid"
-    mastered = "mastered"
 
 
 class LessonKind(StrEnum):

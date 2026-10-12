@@ -129,6 +129,7 @@ Deterministic rules decide; the LLM only writes the explanation and remediation 
 | 3 | Concept → solid (first attempt, or after a 2; after a 1 it takes one more attempt, see §4.9) | Continue. Dependents unlock once the band is solid; if it isn't yet, the learner retakes the quiz (no remediation) |
 | 1–2 | Concept → shaky/learning | Dependents stay locked. **Insert a remediation concept** that re-teaches from a *different angle* and targets the named misconception |
 
+- **Remediation mechanics** (ADR-0022): the remediation concept is inserted as a new prerequisite of the failed concept, so the gate re-locks the original until the remediation is solid, then the learner retakes it. At most 2 remediations per concept; after that a low score asks for a retake.
 - **Prerequisite gate:** a concept unlocks when all its prerequisites are **solid or better**.
 - **Override:** a learner may open a locked concept after a specific warning about what will break without the prerequisite. The override is logged. They're adults; they should know the cost.
 - **Every plan change creates a new plan version** with a trigger and a plain-English "why" naming the score and the misconception, shown as a diff.
@@ -142,7 +143,7 @@ Mastery is the product's estimate of current understanding. It's simple and expl
 - All constants live in config. Tuning them against real outcomes is P2.
 
 ### 4.10 Spaced review
-- Scheduling uses the open-source **`fsrs`** Python package (Free Spaced Repetition Scheduler, from open-spaced-repetition; verify the current API and license). It replaces a hand-rolled scheduler. Rating map: 1 → Again, 2 → Hard, 3 → Good, 4 → Easy.
+- Scheduling uses the open-source **`fsrs`** Python package (Free Spaced Repetition Scheduler, from open-spaced-repetition; verify the current API and license). It replaces a hand-rolled scheduler. Rating map: 1 → Again, 2 → Hard, 3 → Good, 4 → Easy. Every graded attempt is one review, on a day scale: no minute-scale learning steps and no fuzzing (ADR-0018).
 - P1 computes and stores due dates; the dashboard shows "N concepts due for review".
 - *(P2)* **Review session:** due reviews first (interleaved across concepts, as cheap retrieval warm-up), then one new concept, then one transfer question linking the new concept to an earlier one.
 - *(P2)* FSRS parameter optimization from each learner's review history (verify support in `fsrs`).
@@ -154,7 +155,7 @@ Mastery is the product's estimate of current understanding. It's simple and expl
 ## 5. Grounded (org) courses
 - Teach from the provided sources, not general knowledge. **Every factual claim drawn from org docs carries a citation (doc + section).**
 - If something isn't in the sources, say **"This isn't covered in your docs"** rather than guessing. Optionally offer general knowledge, clearly labeled as such.
-- Quizzes for grounded courses test the org's actual practices (e.g. "per Acme's escalation policy, who do you page when…").
+- Quizzes for grounded courses test the org's actual practices (e.g. "per Acme AI's escalation policy, who do you page when…").
 - *(P2)* **Source gaps** are surfaced to the org admin as a list (questions learners asked that the docs couldn't answer), turning training into a docs-debt signal.
 
 ## 6. Format preferences ("learner type")
