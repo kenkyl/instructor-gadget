@@ -37,7 +37,7 @@ def with_guard(fn):
             IntakeGuard.build,
             DB0,
             CustomVectorizer(embed=_embed),
-            name=f"test:intake_guard:{uuid.uuid4().hex[:8]}",
+            name=f"test:idx:intake_guard:{uuid.uuid4().hex[:8]}",
         )
         try:
             return await fn(guard)
@@ -79,3 +79,15 @@ def test_create_course_rejects_blocked_intake_and_stores_nothing(client) -> None
     assert res.status_code == 422 and res.json()["detail"] == REASONS["dangerous"]
     assert ok.status_code == 201
     assert _db(select(func.count()).select_from(Course))[0][0] == before + 1
+
+
+def test_guard_fails_open_when_redis_errors() -> None:
+    """A dropped index (e.g. FLUSHDB elsewhere) must not turn course creation into a 500."""
+    from redis.exceptions import ResponseError
+
+    class _Broken:
+        def __call__(self, text: str):
+            raise ResponseError("idx:intake_guard: no such index")
+
+    guard = IntakeGuard(_Broken())  # type: ignore[arg-type]
+    assert asyncio.run(guard.blocked("how do I make a pipe bomb")) is None

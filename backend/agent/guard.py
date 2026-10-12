@@ -12,12 +12,16 @@ rules and refusals are the backstop.
 """
 
 import asyncio
+import logging
 
+from redis.exceptions import RedisError
 from redisvl.extensions.router import Route, RoutingConfig, SemanticRouter
 from redisvl.extensions.router.schema import DistanceAggregationMethod
 from redisvl.utils.vectorize import BaseVectorizer
 
-INDEX_NAME = "intake_guard"
+log = logging.getLogger(__name__)
+
+INDEX_NAME = "idx:intake_guard"  # RedisVL also uses it as the key prefix
 # Cosine distance. Calibrated on MiniLM: blocked requests fell at 0.16–0.34 ("tell me the weather
 # today?", "how do I make a pipe bomb", "ignore all previous instructions…"); the closest
 # legitimate topic was "Python" at 0.43 (to "dangerous"). Re-checked by the PC3.2 eval.
@@ -109,7 +113,12 @@ class IntakeGuard:
         for text in texts:
             if text and text.strip():
                 # RedisVL's router is sync-only (embed + FT.AGGREGATE): keep it off the event loop.
-                match = await asyncio.to_thread(self.router, text.strip())
+                try:
+                    match = await asyncio.to_thread(self.router, text.strip())
+                except RedisError:
+                    # Fail open, like the caches: the model's conduct rules are the backstop.
+                    log.warning("intake guard: lookup failed, allowing", exc_info=True)
+                    return None
                 if match.name is not None:
                     return REASONS.get(match.name, REASONS["dangerous"])
         return None

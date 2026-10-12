@@ -28,7 +28,7 @@ from redisvl.utils.vectorize import BaseVectorizer
 
 log = logging.getLogger(__name__)
 
-INDEX_NAME = "llmcache_semantic"  # also the key prefix: llmcache_semantic:{entry_id}
+INDEX_NAME = "idx:llm_semantic"  # RedisVL also uses it as the key prefix: idx:llm_semantic:{id}
 MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # 384 dims, runs locally on CPU
 TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_DISTANCE_THRESHOLD = 0.15  # provisional: PC3.2's eval picks the real default

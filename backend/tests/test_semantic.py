@@ -81,7 +81,7 @@ def with_tier(fn, threshold: float = 0.1):
         tier = await asyncio.to_thread(
             SemanticTier.build,
             DB0,
-            name=f"test:llmcache_semantic:{uuid.uuid4().hex[:8]}",
+            name=f"test:idx:llm_semantic:{uuid.uuid4().hex[:8]}",
             vectorizer=fake_vectorizer,
             distance_threshold=threshold,
         )

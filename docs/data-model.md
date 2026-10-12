@@ -62,7 +62,7 @@ flowchart LR
     SESS[("sess:{token}<br/>hash")]
     DASH[("dash:{user_id}<br/>JSON")]
     EX[("llm:exact:{sha256}<br/>JSON + index")]
-    SEM[("llmcache_semantic<br/>vector index")]
+    SEM[("idx:llm_semantic<br/>vector index")]
   end
 
   UI -->|cookie sid| R --> AUTH -->|GET| SESS
@@ -802,7 +802,10 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 | `sess:{token}` | **hash** | 8 h (`SESSION_TTL_SECONDS`) | Login (`HSET` + `EXPIRE`) | `get_current_user` on every request (`HGETALL`) | Logout (`DEL`) or expiry | ✅ PC0.5 |
 | `dash:{user_id}` | **JSON** (native) | 10 min (`DASHBOARD_TTL_SECONDS`) | Warmed at login; refilled on a cache miss (cache-aside), `JSON.SET` | `GET /api/dashboard` (`JSON.GET`) | `DEL` on any write affecting that user's enrollments (accept, quiz submit, assignment, completion) | ✅ PC0.5 |
 | `llm:exact:{sha256}` | **JSON** (native), indexed by `idx:llm_exact` | 7 days | After a successful generation of a cacheable call (`JSON.SET` + `EXPIRE` in one `MULTI`) | Before every cacheable call, tier 1 (`JSON.GET`); a hit also runs `JSON.NUMINCRBY $.hits 1` | A new `prompt_version` produces a new key, so old entries age out; targeted purge via `FT.SEARCH` on skill or prompt version | ✅ PC2.2 (`agent/cache.py`) |
-| `llmcache_semantic` (RedisVL `SemanticCache` index) | hash + vector index | 7 days per entry | After a successful `teach-concept` generation | `teach-concept` on an exact miss (tier 2, nearest neighbour within a distance threshold, **filtered by bucket tags**) | Prompt-version tag mismatch; TTL | 🔜 PC3.1 |
+| `idx:llm_semantic:{id}`, indexed by `idx:llm_semantic` (RedisVL `SemanticCache`) | hash + vector index | 7 days per entry | After a successful `teach-concept` generation | `teach-concept` on an exact miss (tier 2, nearest neighbour within a distance threshold, **filtered by bucket tags**) | Prompt-version tag mismatch; TTL | ✅ PC3.1 |
+| `idx:intake_guard:{route}:{hash}`, indexed by `idx:intake_guard` (RedisVL `SemanticRouter`) | hash + vector index | none | Rebuilt from `agent/guard.py` at startup | `POST /api/courses` (intake check) | Overwritten at startup | ✅ PC3.3 |
+
+**Index naming:** every search index is `idx:<name>`, with `llm_` for the LLM caches (`idx:llm_exact`, `idx:llm_semantic`). RedisVL uses the index name as its keys' prefix too, so the semantic cache and guard keys start with `idx:`.
 
 **Why these types (ADR-0011):**
 - **Hash** for sessions: tiny, flat, and read whole on every request. It's the idiomatic, compact Redis structure for that.
@@ -853,9 +856,9 @@ Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, re
 
 Realized savings (hit rate, $ and seconds saved) come from `llm_calls` in Postgres, which records every lookup. The index describes what's *in* the cache.
 
-### 6.4 Semantic LLM cache: `llmcache_semantic` ✅ PC3.1
+### 6.4 Semantic LLM cache: `idx:llm_semantic` ✅ PC3.1
 
-RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `llmcache_semantic:{entry_id}` (`entry_id` = hash of the prompt text + filters), indexed by the `llmcache_semantic` vector index (DB 0 only, ADR-0019). TTL 7 days, refreshed on a hit.
+RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `idx:llm_semantic:{entry_id}` (RedisVL uses the index name as the key prefix) (`entry_id` = hash of the prompt text + filters), indexed by the `idx:llm_semantic` vector index (DB 0 only, ADR-0019). TTL 7 days, refreshed on a hit.
 
 | Part | Content |
 |---|---|
@@ -867,9 +870,9 @@ RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `llmcache_semantic:{
 | Read | Every `semantic`-policy call (today: `teach-concept.teach` for core lessons) after an exact miss. A hit sets `lessons.cache_result = semantic_hit` and `cache_key` = the entry's Redis key; `llm_calls` gets `similarity` (1 − distance) and the saved cost/latency |
 | Write | On a miss, after the output validates (alongside the exact entry) |
 
-### 6.5 Intake guard: `intake_guard` ✅ PC3.3
+### 6.5 Intake guard: `idx:intake_guard` ✅ PC3.3
 
-A RedisVL `SemanticRouter` index on DB 0 (ADR-0024). Each block-route reference phrase is a hash under the `intake_guard` prefix holding its route name and MiniLM vector. The router's config is stored alongside it by RedisVL. Rebuilt (`overwrite=True`) at every startup from `agent/guard.py`, so it holds nothing that can't be rebuilt; no TTL. Read on `POST /api/courses` (topic, goal and expert_means, each checked separately). Never written at runtime.
+A RedisVL `SemanticRouter` index on DB 0 (ADR-0024). Each block-route reference phrase is a hash at `idx:intake_guard:{route}:{hash}` (RedisVL uses the index name as the key prefix) holding its route name and MiniLM vector. The router's config is stored alongside it by RedisVL. Rebuilt (`overwrite=True`) at every startup from `agent/guard.py`, so it holds nothing that can't be rebuilt; no TTL. Read on `POST /api/courses` (topic, goal and expert_means, each checked separately). Never written at runtime.
 
 **Never cached** (results are logged as `bypass` in `llm_calls`):
 - `diagnose`, `grade` and `remediate`, which are learner-specific by definition

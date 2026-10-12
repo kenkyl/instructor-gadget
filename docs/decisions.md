@@ -253,6 +253,7 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Faking the Query Engine: it would prove nothing about the real index.
 **Consequences:** API tests run without `idx:llm_exact`. CP3's RedisVL tests follow the same DB-0, `test:`-prefix pattern.
 **One-liner:** Keys can live anywhere; indexes only on DB 0, so index tests borrow DB 0 under a throwaway prefix.
+**Addendum (PC3.3):** on Redis 8, `FLUSHDB` on *any* DB drops every search index, DB 0's included. The test setup flushed DB 15, so each `make test` silently removed a running dev server's indexes. Tests now delete DB 15's keys (`SCAN` + `UNLINK`) instead; never `FLUSHDB`/`FLUSHALL` while indexes matter.
 
 ## ADR-0020: SSE through the Next proxy: `Cache-Control: no-transform`
 **Context:** The lesson streams as SSE from FastAPI through Next's `/api` rewrite. Measured live, a browser-like client (`Accept-Encoding: gzip`) received all 332 events in one burst at 13 s. Without gzip, the same request through Next streamed: the first event at 1.5 s, 286 distinct arrival times. The rewrite streams; Next's response compression buffers.
@@ -308,10 +309,10 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 ## ADR-0024: Intake guard: a semantic router with block routes only
 **Context:** Course creation accepts free text (topic, goal) that is later sent to the model. Kyle asked for a simple filter for requests that aren't about learning anything (crude, off-topic like "tell me the weather today?", dangerous like "run this python code snippet", prompt injection), with minimal code.
 **Decision:**
-- RedisVL's `SemanticRouter` (no new dependency) with four **block** routes of ~5–10 reference phrases each, sharing the semantic cache's local MiniLM model and running on DB 0 (`intake_guard` index, rebuilt at startup).
+- RedisVL's `SemanticRouter` (no new dependency) with four **block** routes of ~5–10 reference phrases each, sharing the semantic cache's local MiniLM model and running on DB 0 (`idx:intake_guard` index, rebuilt at startup).
 - Each non-empty intake field (topic, goal, expert_means) is checked on its own; a field within cosine distance 0.40 of any block reference (nearest-reference aggregation) rejects the request with a 422 and a short reason, before anything is stored or sent to the model.
 - No "learning" allow route: in calibration, short course titles ("Redis caching patterns") were as far from generic "learn X" phrases as from anything else, and nearest-route classification blocked "Writing secure Python code".
-- If the guard can't start (not DB 0, model unavailable), intake runs without it: the model's conduct rules and refusals are the backstop.
+- If the guard can't start (not DB 0, model unavailable) or a lookup fails (e.g. its index was dropped), intake runs without it: the model's conduct rules and refusals are the backstop.
 **Alternatives:**
 - An LLM classifier call: better recall, but ~1–3 s and a paid call on every course creation.
 - Keyword lists: brittle and easy to evade; embeddings catch paraphrases ("tell me a filthy joke").
