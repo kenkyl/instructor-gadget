@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     dashboard_ttl_seconds: int = 10 * 60
 
+    # Semantic LLM cache (tier 2, CP3). Cosine distance: lower = stricter. Provisional default
+    # until the PC3.2 eval sweeps it. Off: only the exact tier runs (and no model is loaded).
+    semantic_cache_enabled: bool = True
+    semantic_cache_distance_threshold: float = 0.15
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,11 +1,15 @@
 # Build log
 
-> **Current status:** CP3 started (Redis deep dive: semantic cache, trace, cache impact). Next: **PC3.1** (RedisVL `SemanticCache` with filter buckets + local MiniLM vectorizer) on branch `cp3/redis-deep-dive` (draft PR #4).
+> **Current status:** CP3 / PC3.1 ✅ (semantic tier: RedisVL `SemanticCache` + local MiniLM, bucket TAG filters, in the LLM wrapper; ADR-0023). Next: **PC3.2** (cache eval: should-hit / should-miss pairs, threshold sweep, choose the default) on branch `cp3/redis-deep-dive` (draft PR #4).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
 ---
+
+## CP3 notes (in progress; folded into the CP3 entry when CP3 closes)
+
+- **PC3.1:** reading the installed RedisVL 0.28 source (not memory) showed two things the docs gloss over. The HF vectorizer has no real async embed (its `aembed` blocks), so embedding runs in a worker thread. And `SemanticCache.__init__` loads the model and creates the index synchronously, so startup builds it via `asyncio.to_thread`. A comma in a tag value would be split by RedisVL's tag separator, so formats are joined with `+`. MiniLM distances measured before choosing a threshold: paraphrase 0.135, reworded same concept 0.232, near-misses 0.217–0.269. The bands overlap, so the provisional 0.15 is strict and PC3.2 decides. Live: a reworded lesson request hit at similarity 0.989 in 0.1 s (saved $0.021); a thread-pool concept with the same words missed. Kyle asked the AI to build the ★ (bucket + filter) and explain it, for time.
 
 ## CP2: Learn, check, adapt (Sun 2026-10-11, PR #3)
 

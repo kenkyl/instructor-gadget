@@ -853,14 +853,19 @@ Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, re
 
 Realized savings (hit rate, $ and seconds saved) come from `llm_calls` in Postgres, which records every lookup. The index describes what's *in* the cache.
 
-### 6.4 Semantic LLM cache: `llmcache_semantic`
+### 6.4 Semantic LLM cache: `llmcache_semantic` ✅ PC3.1
+
+RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `llmcache_semantic:{entry_id}` (`entry_id` = hash of the prompt text + filters), indexed by the `llmcache_semantic` vector index (DB 0 only, ADR-0019). TTL 7 days, refreshed on a hit.
 
 | Part | Content |
 |---|---|
-| Embedded text | `"{concept title}\n{mastery statement}"`, embedded locally with `all-MiniLM-L6-v2` (384 dims) |
-| Response | The validated `LessonOutput` JSON, plus the original cost and latency |
-| Filter tags (the "bucket") | `skill_call`, `org_id` (or `public`), `target_level`, `formats_key`, `analogy_key`, `prompt_version`, `doc_set_hash` |
-| Threshold | `SEMANTIC_CACHE_DISTANCE_THRESHOLD`; the default is chosen by the false-hit eval (CP3) |
+| Embedded text (`prompt`) | `"{topic}\n{concept title}\n{mastery statement}"`, embedded locally with `all-MiniLM-L6-v2` (384 dims, float32, cosine) |
+| `response` | The validated `LessonOutput` JSON |
+| `metadata` | `{cost_usd, latency_ms, created_at}`: what generating it cost, so a hit can log what it saved |
+| Filter TAGs (the "bucket") | `skill_call`, `model`, `prompt_version`, `org_id` (or `public`), `target_level`, `formats_key` (sorted, `+`-joined), `analogy_key` (slugged or `none`), `doc_set_hash` (or `none`). All must match before the vector search |
+| Threshold | `SEMANTIC_CACHE_DISTANCE_THRESHOLD` (cosine distance), provisional 0.15; PC3.2's eval chooses the default. `SEMANTIC_CACHE_ENABLED=false` turns the tier off |
+| Read | Every `semantic`-policy call (today: `teach-concept.teach` for core lessons) after an exact miss. A hit sets `lessons.cache_result = semantic_hit` and `cache_key` = the entry's Redis key; `llm_calls` gets `similarity` (1 − distance) and the saved cost/latency |
+| Write | On a miss, after the output validates (alongside the exact entry) |
 
 **Never cached** (results are logged as `bypass` in `llm_calls`):
 - `diagnose`, `grade` and `remediate`, which are learner-specific by definition

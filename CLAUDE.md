@@ -57,7 +57,8 @@ Filled in as they come to exist (PC0.2+).
 | `make doctor` | Health checks: Postgres, Redis PING, Redis >= 8, Query Engine (`FT._LIST`) |
 | `make down` / `make nuke` | Stop data stores / stop and delete their volumes |
 | `make psql` / `make redis-cli` | Shells into the data stores |
-| `make install` | Install backend (uv) + web (npm) dependencies |
+| `make install` | Install backend (uv) + web (npm) dependencies, then `make models` |
+| `make models` | Download the local MiniLM embedding model for the semantic cache (once; ~90 MB) |
 | `make migrate` | Apply Alembic migrations to the dev DB |
 | `make migration m="..."` | Autogenerate a migration after changing `app/models.py`; always review the generated file |
 | `make seed` | Seed the sample org (Acme AI) + users kyle, dana, priya (idempotent) |

@@ -288,3 +288,19 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - A version per unlock: the history fills with noise, and the "why" loses its meaning.
 **Consequences:** One gating rule covers prereqs, remediation and the retake loop. The plan history reads as decisions (diagnosis, remediation, test-out, override).
 **One-liner:** A remediation is just a new prerequisite, so the gate we already trust does the re-locking.
+
+## ADR-0023: The semantic tier lives in the LLM wrapper; the service supplies the text and the bucket
+**Context:** ADR-0007 defines what a lesson may share (the bucket) and that only `semantic`-policy calls use the tier. RedisVL's `SemanticCache` gives the vector index, TAG filters and TTLs, but someone has to decide what gets embedded, which fields form the bucket, and where the lookup sits relative to the exact tier and the model call.
+**Decision:**
+- **Order:** exact → semantic → model, inside `LLMClient`. A semantic hit is a call like any other: logged to `llm_calls` with zero tokens, its similarity, and the cost and latency it saved. A miss stores the validated output in both tiers.
+- **Who knows what:** the service passes a `SemanticKey` (text to embed + org, level, formats, analogy, doc-set hash). The wrapper adds skill/call, model and prompt version. A key passed to a non-`semantic` call is ignored, so a personal call can't opt in by mistake.
+- **Embedded text:** topic + concept title + mastery statement. The topic is there because a title alone is ambiguous across courses ("pool exhaustion" for DB vs thread pools).
+- **Bucket:** eight TAG fields matched exactly *before* the vector range search (not one hashed tag), so the trace, Redis Insight and a future purge-by-prompt-version can read them. Values are normalised (sorted formats joined with `+`, since a comma is RedisVL's tag separator; slugged analogy; `none`/`public` for absent values).
+- **Runtime:** MiniLM (`all-MiniLM-L6-v2`, 384 dims) runs locally; embedding (~3 ms) runs in a worker thread because the HF vectorizer has no real async path. The tier needs DB 0 (ADR-0019) and is off elsewhere (API tests). A startup failure disables the tier, not the app.
+- **Threshold:** cosine distance 0.15, provisional. Measured on MiniLM: a paraphrase 0.135; a reworded same concept 0.232; near-misses 0.217–0.269. The bands overlap, so the strict side wins until PC3.2's sweep.
+**Alternatives:**
+- Semantic lookup in the lesson service: every future semantic call would re-implement logging, validation and storage.
+- RedisVL's default `redis/langcache-embed-v1` model: tuned for chat-style Q&A, larger, and not what the brief specified.
+- A single hashed bucket tag: smaller, but opaque in the trace and impossible to filter by one dimension.
+**Consequences:** Measured live: a reworded lesson request was served in 0.1 s at similarity 0.989, saving $0.021, while "thread pool exhaustion" with the same words in another topic missed. The first startup downloads the model (`make models` does it ahead of time).
+**One-liner:** Exact first, then meaning, but only among learners who would have been taught the same way.

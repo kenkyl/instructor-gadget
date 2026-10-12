@@ -35,6 +35,7 @@ from pydantic import BaseModel, ValidationError
 
 from agent.cache import ExactCache, ExactEntry, exact_key
 from agent.registry import Call, Registry, SkillError
+from agent.semantic import SemanticHit, SemanticKey, SemanticTier, bucket
 
 # USD per million tokens (input, output). Source: Anthropic pricing, checked 2026-10-11.
 # The fallback model is listed too, since a rescued request is billed at its rates.
@@ -76,7 +77,7 @@ class CallRecord:
     call: str
     model: str  # the model that actually served the request (differs after a fallback)
     prompt_version: str
-    cache_result: Literal["miss", "exact_hit", "bypass"]  # semantic_hit arrives in CP3
+    cache_result: Literal["miss", "exact_hit", "semantic_hit", "bypass"]
     attempt: int
     status: Literal["ok", "error"]
     input_tokens: int
@@ -90,6 +91,7 @@ class CallRecord:
     cache_key: str | None = None
     saved_cost_usd: float = 0.0  # on a hit: what generating the entry cost
     saved_latency_ms: int = 0
+    similarity: float | None = None  # semantic hits: 1 − cosine distance to the matched entry
 
 
 class CallSink(Protocol):
@@ -138,8 +140,8 @@ class Restart:
 @dataclass(frozen=True)
 class Done[T: BaseModel]:
     output: T
-    cache_result: Literal["miss", "exact_hit", "bypass"]
-    cache_key: str | None
+    cache_result: Literal["miss", "exact_hit", "semantic_hit", "bypass"]
+    cache_key: str | None  # exact key, or the semantic entry's Redis key on a semantic hit
 
 
 type StreamEvent[T: BaseModel] = TextDelta | Restart | Done[T]
@@ -159,12 +161,14 @@ class LLMClient:
         *,
         model: str,
         cache: ExactCache | None = None,
+        semantic: SemanticTier | None = None,
     ) -> None:
         self.client = client
         self.registry = registry
         self.sink = sink
         self.model = model
         self.cache = cache
+        self.semantic = semantic
 
     async def run[T: BaseModel](
         self,
@@ -174,9 +178,11 @@ class LLMClient:
         output_type: type[T],
         *,
         ctx: CallContext,
+        semantic: SemanticKey | None = None,
     ) -> T:
         """One validated output (from the cache or the model)."""
-        async for event in self._generate(skill, call, payload, output_type, ctx, stream=False):
+        events = self._generate(skill, call, payload, output_type, ctx, semantic, stream=False)
+        async for event in events:
             if isinstance(event, Done):
                 return event.output
         raise AssertionError("unreachable")
@@ -189,12 +195,14 @@ class LLMClient:
         output_type: type[T],
         *,
         ctx: CallContext,
+        semantic: SemanticKey | None = None,
     ) -> AsyncIterator[StreamEvent[T]]:
         """TextDelta chunks as the model writes, Restart before a retry, then Done.
 
-        A cache hit yields Done straight away. Errors raise, as in run().
+        A cache hit yields Done straight away. Errors raise, as in run(). `semantic` enables the
+        semantic tier for a call whose policy is `semantic` (the service knows the bucket).
         """
-        return self._generate(skill, call, payload, output_type, ctx, stream=True)
+        return self._generate(skill, call, payload, output_type, ctx, semantic, stream=True)
 
     async def _generate[T: BaseModel](
         self,
@@ -203,6 +211,7 @@ class LLMClient:
         payload: BaseModel,
         output_type: type[T],
         ctx: CallContext,
+        semantic: SemanticKey | None,
         *,
         stream: bool,
     ) -> AsyncIterator[StreamEvent[T]]:
@@ -231,6 +240,25 @@ class LLMClient:
                 if output is not None:
                     await self._log_hit(c, version, ctx, key, entry, user_msg, started)
                     yield Done(output, "exact_hit", key)
+                    return
+
+        # Tier 2: semantic, only for calls declared `semantic` and only inside the bucket the
+        # service supplied (ADR-0007). The vector is reused to store the result on a miss.
+        vector: list[float] | None = None
+        sem_bucket: dict[str, str] | None = None
+        if c.spec.cache == "semantic" and self.semantic is not None and semantic is not None:
+            started = time.perf_counter()
+            sem_bucket = bucket(skill, call, self.model, version, semantic)
+            vector = await self.semantic.embed(semantic.text)
+            hit = await self.semantic.check(vector, sem_bucket)
+            if hit is not None:
+                try:
+                    output = output_type.model_validate(hit.output)
+                except ValidationError:
+                    output = None  # a stale shape (e.g. an old schema) is a miss
+                if output is not None:
+                    await self._log_semantic_hit(c, version, ctx, hit, semantic.text, started)
+                    yield Done(output, "semantic_hit", hit.key)
                     return
 
         system = self.registry.system_prompt(skill, call)
@@ -280,6 +308,15 @@ class LLMClient:
                         created_at=int(time.time()),
                         output=result.model_dump(mode="json"),
                     ),
+                )
+            if self.semantic is not None and semantic is not None and vector and sem_bucket:
+                await self.semantic.store(
+                    semantic.text,
+                    vector,
+                    sem_bucket,
+                    result.model_dump(mode="json"),
+                    cost_usd=round(spent_usd, 6),
+                    latency_ms=spent_ms,
                 )
             yield Done(result, "bypass" if c.spec.cache == "never" else "miss", key)
             return
@@ -406,6 +443,40 @@ class LLMClient:
                 cache_key=key,
                 saved_cost_usd=entry.cost_usd,
                 saved_latency_ms=entry.latency_ms,
+            )
+        )
+
+    async def _log_semantic_hit(
+        self,
+        c: Call,
+        version: str,
+        ctx: CallContext,
+        hit: SemanticHit,
+        prompt: str,
+        started: float,
+    ) -> None:
+        """Like an exact hit, plus the similarity, so the trace shows how close the match was."""
+        await self.sink.record(
+            CallRecord(
+                skill=c.skill,
+                call=c.name,
+                model=self.model,
+                prompt_version=version,
+                cache_result="semantic_hit",
+                attempt=1,
+                status="ok",
+                input_tokens=0,
+                output_tokens=0,
+                latency_ms=_elapsed_ms(started),
+                est_cost_usd=0.0,
+                error=None,
+                prompt_excerpt=f"{prompt}\n~ matched: {hit.prompt}"[:EXCERPT_CHARS],
+                response_excerpt=json.dumps(hit.output)[:EXCERPT_CHARS],
+                context=ctx,
+                cache_key=hit.key,
+                saved_cost_usd=hit.entry.cost_usd,
+                saved_latency_ms=hit.entry.latency_ms,
+                similarity=hit.similarity,
             )
         )
 

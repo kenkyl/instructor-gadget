@@ -53,7 +53,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 ## CP3: Redis deep dive
 | PC | Build | ★ Kyle |
 |---|---|---|
-| PC3.1 | RedisVL `SemanticCache` with filter buckets (ADR-0007) and the local MiniLM vectorizer | The bucket and filter construction |
+| PC3.1 | RedisVL `SemanticCache` with filter buckets (ADR-0007) and the local MiniLM vectorizer. ✅ In the LLM wrapper, exact → semantic → model (ADR-0023) | The bucket and filter construction (done by the AI at Kyle's request) |
 | PC3.2 | Cache eval: should-hit and should-miss pairs, a threshold sweep, choose the default threshold | — |
 | PC3.3 | Trace page (`llm_calls`, cache result, similarity) + cache impact tile | — |
 
