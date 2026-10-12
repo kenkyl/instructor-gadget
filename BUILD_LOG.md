@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP3 / PC3.1 ✅ (semantic tier, ADR-0023) and PC3.3 ✅ (intake guard, a semantic router, ADR-0024; added by Kyle mid-CP). Next: **PC3.2** (cache eval: threshold sweep) on branch `cp3/redis-deep-dive` (draft PR #4).
+> **Current status:** CP3 / PC3.1 ✅ (semantic tier, ADR-0023), PC3.3 ✅ (intake guard, ADR-0024; added by Kyle), plus fixes from Kyle's verification (idx: naming, tests never FLUSHDB, intake Back-button reset). Next: **PC3.2** (cache eval + threshold sweep), then PC3.4 (trace page + cache impact tile), then close CP3, on branch `cp3/redis-deep-dive` (draft PR #4). PR #5 (Solarized UI) is ready; whichever of #4/#5 merges second resolves a keep-both conflict at the end of `docs/decisions.md` (see build plan, known follow-ups).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
