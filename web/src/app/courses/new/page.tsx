@@ -6,6 +6,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { BackLink, Page } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -110,13 +111,15 @@ export default function NewCoursePage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-10 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">New course</h1>
-        <p className="text-muted-foreground text-sm">
-          Tell the instructor what you want to learn. The defaults suit most courses.
+    <Page className="space-y-8">
+      <header className="space-y-3">
+        <BackLink href="/">Courses</BackLink>
+        <h1>New course</h1>
+        <p className="text-muted-foreground max-w-[60ch]">
+          Tell the instructor what you want to learn. The defaults suit most courses, so a topic is
+          often enough.
         </p>
-      </div>
+      </header>
 
       <form onSubmit={submit} className="space-y-6">
         <Card>
@@ -228,7 +231,7 @@ export default function NewCoursePage() {
 
         <Card>
           <CardContent className="space-y-3">
-            <p className="text-sm font-medium">Formats you prefer</p>
+            <p className="text-strong text-sm font-semibold">Formats you prefer</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {FORMATS.map((f) => (
                 <label key={f.id} className="flex items-center gap-2 text-sm">
@@ -237,7 +240,7 @@ export default function NewCoursePage() {
                     onCheckedChange={(on) => toggleFormat(f.id, on)}
                   />
                   {f.label}
-                  {!f.ready && <span className="text-muted-foreground text-xs">coming soon</span>}
+                  {!f.ready && <span className="text-muted-foreground text-xs">Coming soon</span>}
                 </label>
               ))}
             </div>
@@ -258,7 +261,7 @@ export default function NewCoursePage() {
           </Button>
         </div>
       </form>
-    </main>
+    </Page>
   );
 }
 
@@ -277,7 +280,7 @@ function Field({
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>
         {label}
-        {hint && <span className="text-muted-foreground font-normal">· {hint}</span>}
+        {hint && <span className="text-muted-foreground font-normal">({hint.toLowerCase()})</span>}
       </Label>
       {children}
     </div>

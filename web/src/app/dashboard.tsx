@@ -1,15 +1,18 @@
 "use client";
 
+import { GraduationCap, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Page, PageMessage } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 type DashboardData = Schemas["DashboardResponse"];
+type Course = DashboardData["courses"][number];
 
 export function Dashboard() {
   const router = useRouter();
@@ -29,55 +32,103 @@ export function Dashboard() {
     router.replace("/login");
   }
 
-  if (error) return <p className="p-10 text-destructive">{error}</p>;
-  if (!data) return <p className="p-10 text-muted-foreground">Loading…</p>;
+  if (!data) return <PageMessage error={error}>Loading your courses…</PageMessage>;
 
   return (
-    <main className="mx-auto max-w-3xl p-10 space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Hi, {data.user.username}</h1>
-          <p className="text-muted-foreground text-sm">{data.user.display_name}</p>
-        </div>
-        <div className="flex items-center gap-3">
+    <Page
+      className="space-y-8"
+      bar={
+        <>
           {/* Makes the cache-aside layer visible: "cache" = Redis JSON hit, "db" = rebuilt from Postgres */}
-          <Badge variant="outline" title={`generated ${data.generated_at}`}>
-            served from {data.served_from}
-          </Badge>
-          <Button variant="outline" onClick={logout}>
+          <span
+            className="text-cyan-ink hidden items-center gap-1.5 text-xs sm:inline-flex"
+            title={`Generated ${new Date(data.generated_at).toLocaleTimeString()}`}
+          >
+            <span className="bg-cyan size-1.5 rounded-full" />
+            {data.served_from === "cache" ? "Served from Redis cache" : "Rebuilt from Postgres"}
+          </span>
+          <span className="text-muted-foreground hidden text-sm sm:inline">{data.user.display_name}</span>
+          <Button variant="ghost" size="sm" onClick={logout}>
             Log out
           </Button>
+        </>
+      }
+    >
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1>Your courses</h1>
+          <p className="text-muted-foreground">Signed in as {data.user.username}</p>
         </div>
+        <Link href="/courses/new" className={buttonVariants()}>
+          <Plus data-icon="inline-start" />
+          New course
+        </Link>
       </header>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium">Your courses</h2>
-          <Button onClick={() => router.push("/courses/new")}>New course</Button>
+      {data.courses.length === 0 ? (
+        <div className="space-y-3 rounded-lg border border-dashed p-8">
+          <p className="text-strong font-semibold">No courses yet</p>
+          <p className="text-muted-foreground max-w-[60ch]">
+            Name a topic and the instructor checks what you already know, then plans a course from
+            there.
+          </p>
+          <Link href="/courses/new" className={buttonVariants({ variant: "outline" })}>
+            Start your first course
+          </Link>
         </div>
-        {data.courses.length === 0 ? (
-          <Card>
-            <CardContent className="text-muted-foreground">No courses yet.</CardContent>
-          </Card>
-        ) : (
-          data.courses.map((c) => (
-            <Card key={c.enrollment_id}>
-              <CardHeader>
-                <CardTitle>
-                  <Link href={`/learn/${c.enrollment_id}`} className="hover:underline">
-                    {c.title}
-                  </Link>
-                  {c.status === "complete" && " 🎓"}
-                </CardTitle>
-                <CardDescription>
-                  {c.scope === "org" ? `Org course · ${c.org_name}` : "Personal course"} ·{" "}
-                  {c.concepts_complete}/{c.concepts_total} concepts · {c.due_count} due for review
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          ))
-        )}
-      </section>
-    </main>
+      ) : (
+        <ul className="divide-y border-y">
+          {data.courses.map((c) => (
+            <CourseRow key={c.enrollment_id} course={c} />
+          ))}
+        </ul>
+      )}
+    </Page>
+  );
+}
+
+function CourseRow({ course: c }: { course: Course }) {
+  const complete = c.status === "complete";
+  return (
+    <li>
+      <Link
+        href={`/learn/${c.enrollment_id}`}
+        className="group hover:bg-muted/60 -mx-3 block space-y-3 rounded-md px-3 py-5 transition-colors"
+      >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-strong text-lg font-semibold group-hover:underline group-hover:underline-offset-4">
+            {c.title}
+          </span>
+          {complete && (
+            <Badge variant="green">
+              <GraduationCap />
+              Complete
+            </Badge>
+          )}
+          {c.due_count > 0 && <Badge variant="yellow">{c.due_count} due for review</Badge>}
+        </div>
+        <ConceptStrip done={c.concepts_complete} total={c.concepts_total} />
+        <p className="text-muted-foreground flex flex-wrap gap-x-5 text-sm">
+          <span>
+            <span className="num text-foreground">
+              {c.concepts_complete}/{c.concepts_total}
+            </span>{" "}
+            concepts complete
+          </span>
+          <span>{c.scope === "org" ? `${c.org_name} course` : "Personal course"}</span>
+        </p>
+      </Link>
+    </li>
+  );
+}
+
+// One cell per concept, filled as they complete: the plan's rail, flattened.
+function ConceptStrip({ done, total }: { done: number; total: number }) {
+  return (
+    <div className="flex max-w-md gap-1" aria-hidden="true">
+      {Array.from({ length: total }, (_, i) => (
+        <span key={i} className={cn("h-1.5 flex-1 rounded-full", i < done ? "bg-green" : "bg-muted")} />
+      ))}
+    </div>
   );
 }
