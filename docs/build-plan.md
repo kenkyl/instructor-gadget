@@ -22,8 +22,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ✅ merged (PR #2) |
 | CP2 | J2: learn, check, adapt | ✅ merged (PR #3) |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ merged (PR #4) |
-| CP4 | J3: org course grounded in docs | ✅ built, PR #6 ready for review (branch `cp4/org-grounding`): PC4.1 ✅, PC4.2 ✅, PC4.3 ✅ |
-| CP5 | Dashboard + eval harness | |
+| CP4 | J3: org course grounded in docs | ✅ merged (PR #6) |
+| CP5 | Dashboard + eval harness | in progress (branch `cp5/dashboard-evals`) |
 | CP6 | Hardening + sample data, docs, tag `v0.1.0` | |
 
 ## CP1: J1, create a course

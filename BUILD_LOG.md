@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP3 ✅ merged (PR #4). **CP4 ✅ built** (J3: org course grounded in docs) on branch `cp4/org-grounding`, PR #6 ready for review. PC4.1 ✅ (docs, anchors, pinned doc sets, ADR-0028), PC4.2 ✅ (`ground-in-sources`: cited lessons and quizzes, checked by code, ADR-0029), PC4.3 ✅ (admin template flow: docs-grounded map, accept, assign; org cache impact view, ADR-0030). Next: Kyle reviews and merges PR #6, then **CP5** (dashboard + `make evals`) on a new branch from `main`. Still open: Kyle's 8 grader labels (`backend/evals/grader_calibration.yaml`, uncommitted in his working copy) are needed by PC5.2.
+> **Current status:** CP4 ✅ merged (PR #6). **CP5 in progress** (dashboard + `make evals`) on branch `cp5/dashboard-evals`, draft PR open. Next: PC5.1 (dashboard bands, due count, badges, org courses you manage), then PC5.2 (`make evals`). CP6 (`cp6/hardening`) will be stacked on CP5.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
