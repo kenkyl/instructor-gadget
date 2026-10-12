@@ -339,3 +339,57 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 **Alternatives:** Course-scoped rows: leaks other learners' excerpts on shared courses. Estimating savings from token prices: a guess, when the original call's real cost is already logged. Caching the tile in Redis: one indexed aggregate over a learner's calls is milliseconds, and a cached tile would need invalidating on every call.
 **Consequences:** A learner sees their own reuse, including hits on lessons generated for other courses or other learners (the trace says where it saved, never whose lesson it was). The org-wide view, where the cost per learner visibly falls as more learners reuse lessons, belongs to CP4's admin flow, on the same query without the `user_id` filter and without excerpts.
 **One-liner:** The trace is a receipt: your own calls, and savings measured from what the original generation actually cost.
+
+## ADR-0028: Org docs are immutable; a course pins its doc set when it is created
+**Context:** The semantic-cache bucket includes the doc-set hash (ADR-0007, ADR-0023), so a lesson is only shared among courses grounded in exactly the same docs. If a doc could change in place, a course would be grounded in different text than the hash it was cached under says.
+**Decision:**
+- The API has no update path for an org doc. Uploading the same key with the same content returns the stored doc; with different content it is a 409, and the admin uploads the revision under a new title.
+- An org course (admins only, no diagnostic probe) stores `doc_ids` and `doc_set_hash` at creation. The hash is sha256 over the sorted `slug:content_hash` lines, so it ignores the order docs were ticked in and changes on any edit or rename.
+- Citable sections are every heading outside a code fence, with unique anchors computed by code (`agent/sources.py`); a doc with no headings is refused. A doc is at most 60,000 characters and a course's set at most 160,000 (about 40k tokens), the context-stuffing budget.
+**Alternatives:**
+- Versioned docs (a `doc_versions` table): the right shape for edits, but more tables and a "which version" choice for every course, with nothing yet that needs it.
+- Edit in place and recompute the hash of every course that uses the doc: a course silently changes under its learners, and lessons already generated cite text that no longer exists.
+- Hash content only, not the slug: a rename wouldn't invalidate lessons that cite the old slug.
+**Consequences:**
+- An admin can't fix a typo in place; they add a new doc and a new course. That's acceptable for a template that is assigned to many learners.
+- `make seed` upserts the seeded docs, so a developer edit to a seed file can leave an existing dev course with a stale pinned hash. PC4.2 therefore computes the bucket's hash from the docs actually put in the prompt, and treats the stored value as what the course was created with.
+**One-liner:** A course is built on a specific version of its docs, so the docs never change under it; a revision is a new doc.
+
+## ADR-0029: Grounding: docs first in the prompt, our own citations with verbatim quotes checked by code
+**Context:** Org lessons and quizzes must cite the doc and section behind every claim, and say "This isn't covered in your docs" instead of inventing (spec §5). The API's native Citations feature returns a 400 alongside `output_config.format`, and every call here uses structured output (ADR-0013). A grounded call's docs live in the system prompt, not the input, so nothing in the existing cache keys would tell two doc sets apart.
+**Decision:**
+- **Prompt:** `ground-in-sources` is a modifier skill composed into every org-course lesson, remediation lesson and quiz call. The docs go first in the system prompt, sorted by slug and with each section wrapped in a tag carrying its code-computed anchor; the grounding rules go last, so they override "leave citations empty". The docs are reference, not instructions.
+- **Contract:** text carries `[n]` markers; `citations[n-1]` = `{doc, section, quote}`. Gaps go in `not_in_docs` as `{point, general_knowledge | null}`. Quiz questions carry an optional `source` citation, hidden from the learner until they submit.
+- **Checks in code** (validation context, ADR-0015, so a failure earns the one retry): every citation names a real section; its quote is in that section's own text (case, spacing and markdown ignored); markers and citations match one-to-one; a lesson cites or names a gap; a grounded quiz has at least one sourced question. Ungrounded outputs must cite nothing.
+- **Cache identity:** the wrapper takes a `Grounding` whose `doc_set_hash` is computed from the docs it composed. That hash keys the exact tier, sets the semantic bucket's `doc_set_hash` (overriding whatever the service passed), and the grounded `prompt_version` includes the modifier's text. A semantic key whose `org_id` isn't the docs' org is refused before any call.
+**Alternatives:**
+- Native Citations: incompatible with structured output; dropping structured output would lose the validated lesson shape.
+- Citations without quotes: a valid anchor proves nothing about the claim; the quote makes "the section says so" checkable by code.
+- RAG: chunking, embedding and retrieval for a doc set that fits in ~40k tokens (ADR-0028's budget), and a retrieval miss would look like "not in your docs".
+- Instructions before docs: works, but long material above its instructions reads better, and an identical docs prefix is what API prompt caching would reuse.
+**Consequences:**
+- A lesson can still make an uncited claim in prose; per-sentence faithfulness is CP5's LLM-judge eval (`make eval-grounding` prints the cases today).
+- Docs are re-sent on every grounded call (~10k input tokens for the seeded set, about 2¢ on Sonnet 5.5). API prompt caching on the docs prefix is the follow-up if doc sets grow.
+- Personal-course prompt versions and cache keys are unchanged.
+**One-liner:** The model cites by copying anchors and quoting the doc, code checks every quote is really in that section, and the docs' own hash keeps an org's lessons in that org's cache.
+
+## ADR-0030: The org template flow: a docs-grounded map, accept makes it assignable, assigning copies the plan
+**Context:** ADR-0004 says an org admin builds a template (cohort level + docs → grounded map → accept) and each assigned learner's enrollment starts from a copy. Building it raised four questions: what the map call gets with no probe and no assessment, whether a map cites (it has no field for it), what "accept" means when the admin must not be enrolled, and how an admin can see the cache's org-wide effect without seeing what learners wrote (ADR-0027's follow-up).
+**Decision:**
+- **Map:** for an org course the call runs with the course's docs in the prompt, `assessed_level` = the cohort's starting level (`config.self_level`, shown as "Learners start") and no gaps. A call declares how docs apply in its frontmatter: `grounding: cited` (the default: docs plus the ADR-0029 citation rules) or `grounding: docs` (docs only; the call's own instructions say what to do with them). `map-concepts.map` is `docs`: its output has nothing to cite, so the citation rules would describe fields it doesn't have. The grounded `prompt_version` includes the mode.
+- **Accept:** on an org course, `mapped` → `active` enrolls nobody and makes the template read-only and assignable. After that a change is a plan version on an enrollment (ADR-0016).
+- **Assign:** an admin picks members of the org; each gets their own enrollment (`source=assigned`, `assigned_by`), plan v1 = a copy of the template (trigger `assignment`) and one progress row per concept, in one transaction, then each learner's dashboard is invalidated. Assigning someone twice changes nothing. Only an accepted template, only org members.
+- **Org impact:** `GET /api/orgs/{slug}/impact` (admins only) is the trace's aggregate with no `user_id` filter, over every call made on the org's courses, per course and per learner in order of first use. Counts and dollars only: no prompt or response excerpts, which can hold a learner's answers.
+**Alternatives:**
+- A probe the admin takes: diagnoses the wrong person (ADR-0004).
+- Citations on map concepts (a concept → docs mapping in the stored plan): a change to every stored plan's shape for a coverage view nobody has asked for yet. A follow-up if admins want one.
+- Caching the template map: one admin builds it once and the result is stored, so there is no second request to serve.
+- Accept enrolling the admin: the template would show up as the admin's own course and blur template with enrollment.
+- Per-learner excerpts in the admin's view: they hold the learner's answers.
+**Consequences:**
+- Nothing in code checks that a map concept is covered by the docs (the map is language only). Per-concept faithfulness is the CP5 grounding judge's; `make eval-grounding` has a map case.
+- A template can't be corrected after accept: build another course (docs are immutable, ADR-0028).
+- The personal map prompt also carries the "when source documents are given" section, unused without docs (about 200 tokens; the map isn't cached).
+- Grounded lesson and quiz prompt versions changed once (the mode joined the hash), so dev caches from PC4.2 simply miss. Personal versions are unchanged.
+- Admins see usage per learner (calls, hit rate, dollars), never content.
+**One-liner:** The admin builds the course once from the docs, assigning gives each learner their own copy of the plan, and the admin sees what the cache saved without seeing anything a learner wrote.

@@ -18,10 +18,16 @@ Why not forced tool use: current models (Sonnet 5.5, Opus 5.5) reject `tool_choi
 with a 400. Why not `messages.parse()`: it raises on invalid output, which loses the raw text
 and token usage we need for the retry and the log (ADR-0013).
 
+A grounded call (an org course, ADR-0029) passes a `Grounding`: its docs go into the system
+prompt, its doc-set hash into the prompt version's cache keys and the semantic bucket, and the
+grounding becomes validation context, so a citation to a section that doesn't exist, or a quote
+the section doesn't contain, is an invalid output that earns the one retry.
+
 The agent package doesn't import `app`: logging goes through the CallSink protocol, so this
 module can be tested with a fake client and an in-memory sink, and could move to a service.
 """
 
+import dataclasses
 import json
 import time
 import uuid
@@ -36,6 +42,7 @@ from pydantic import BaseModel, ValidationError
 from agent.cache import ExactCache, ExactEntry, exact_key
 from agent.registry import Call, Registry, SkillError
 from agent.semantic import SemanticHit, SemanticKey, SemanticTier, bucket
+from agent.sources import Grounding
 
 # USD per million tokens (input, output). Source: Anthropic pricing, checked 2026-10-11.
 # The fallback model is listed too, since a rescued request is billed at its rates.
@@ -179,9 +186,12 @@ class LLMClient:
         *,
         ctx: CallContext,
         semantic: SemanticKey | None = None,
+        grounding: Grounding | None = None,
     ) -> T:
         """One validated output (from the cache or the model)."""
-        events = self._generate(skill, call, payload, output_type, ctx, semantic, stream=False)
+        events = self._generate(
+            skill, call, payload, output_type, ctx, semantic, grounding, stream=False
+        )
         async for event in events:
             if isinstance(event, Done):
                 return event.output
@@ -196,13 +206,17 @@ class LLMClient:
         *,
         ctx: CallContext,
         semantic: SemanticKey | None = None,
+        grounding: Grounding | None = None,
     ) -> AsyncIterator[StreamEvent[T]]:
         """TextDelta chunks as the model writes, Restart before a retry, then Done.
 
         A cache hit yields Done straight away. Errors raise, as in run(). `semantic` enables the
         semantic tier for a call whose policy is `semantic` (the service knows the bucket).
+        `grounding` answers the call from an org's docs (ADR-0029).
         """
-        return self._generate(skill, call, payload, output_type, ctx, semantic, stream=True)
+        return self._generate(
+            skill, call, payload, output_type, ctx, semantic, grounding, stream=True
+        )
 
     async def _generate[T: BaseModel](
         self,
@@ -212,6 +226,7 @@ class LLMClient:
         output_type: type[T],
         ctx: CallContext,
         semantic: SemanticKey | None,
+        grounding: Grounding | None,
         *,
         stream: bool,
     ) -> AsyncIterator[StreamEvent[T]]:
@@ -222,12 +237,20 @@ class LLMClient:
         if not isinstance(payload, c.input_model):
             raise SkillError(f"{skill}.{call} takes {c.input_model.__name__}")
 
-        version = self.registry.prompt_version(skill, call)
+        version = self.registry.prompt_version(skill, call, grounded=grounding is not None)
         user_msg = payload.model_dump_json(indent=2)
+        doc_set = grounding.doc_set_hash if grounding else None
+        if grounding is not None and semantic is not None:
+            # The bucket's doc set is the docs actually in this prompt, never a value the
+            # service read from the course (ADR-0028). And an org's lesson can't be filed in
+            # another org's bucket, or in the public one.
+            if semantic.org_id != grounding.org_id:
+                raise SkillError(f"{skill}.{call}: semantic org_id must be the grounding's org")
+            semantic = dataclasses.replace(semantic, doc_set_hash=doc_set)
 
         key: str | None = None
         if c.spec.cache != "never" and self.cache is not None:
-            key = exact_key(skill, call, self.model, version, payload)
+            key = exact_key(skill, call, self.model, version, payload, doc_set_hash=doc_set)
             started = time.perf_counter()
             entry = await self.cache.get(key)
             if entry is not None:
@@ -261,7 +284,9 @@ class LLMClient:
                     yield Done(output, "semantic_hit", hit.key)
                     return
 
-        system = self.registry.system_prompt(skill, call)
+        system = self.registry.system_prompt(
+            skill, call, sources=grounding.text if grounding else None
+        )
         messages: list[BetaMessageParam] = [{"role": "user", "content": user_msg}]
         spent_usd, spent_ms = 0.0, 0  # across attempts: what this output cost to generate
 
@@ -278,8 +303,11 @@ class LLMClient:
             spent_ms += att.latency_ms
             try:
                 # The input is validation context, so output validators can check the reply
-                # against the request (e.g. assess: claimed_level must match the claim).
-                result = output_type.model_validate_json(_text(message), context={"input": payload})
+                # against the request (e.g. assess: claimed_level must match the claim), and
+                # citations against the docs it was grounded in.
+                result = output_type.model_validate_json(
+                    _text(message), context={"input": payload, "grounding": grounding}
+                )
             except ValidationError as err:
                 errors = _format_errors(err)
                 await self._log(att, error=f"invalid output:\n{errors}")

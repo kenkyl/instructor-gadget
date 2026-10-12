@@ -21,8 +21,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP0 | Foundations: repo, Postgres + Redis 8, FastAPI + Next.js wiring, CI, data model + migrations + seed, login + Redis sessions + dashboard cache, skill registry + `diagnose` scaffold | ✅ merged |
 | CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ✅ merged (PR #2) |
 | CP2 | J2: learn, check, adapt | ✅ merged (PR #3) |
-| CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ ready for review (PR #4) |
-| CP4 | J3: org course grounded in docs | |
+| CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ merged (PR #4) |
+| CP4 | J3: org course grounded in docs | ✅ built, PR #6 ready for review (branch `cp4/org-grounding`): PC4.1 ✅, PC4.2 ✅, PC4.3 ✅ |
 | CP5 | Dashboard + eval harness | |
 | CP6 | Hardening + sample data, docs, tag `v0.1.0` | |
 
@@ -61,9 +61,9 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 ## CP4: J3, org course grounded in docs
 | PC | Build |
 |---|---|
-| PC4.1 | The 4 Acme AI docs; `org_docs` with section anchors; upload/select |
-| PC4.2 | `ground-in-sources` (a modifier skill): citations on every claim, and "This isn't covered in your docs" |
-| PC4.3 | Admin template flow (ADR-0004), then assign to dana |
+| PC4.1 | The 4 Acme AI docs; `org_docs` with section anchors; upload/select. ✅ `agent/sources.py` (anchors, hashes), org docs API + page, org course drafts pinned to a doc set (ADR-0028); no migration needed (the columns existed) |
+| PC4.2 | `ground-in-sources` (a modifier skill): citations on every claim, and "This isn't covered in your docs". ✅ Docs composed first in the prompt with code-computed anchors; `[n]` markers + citations with verbatim quotes checked by code (one retry on a bad one); grounded lessons, remediation lessons and quizzes; the composed docs' hash keys both cache tiers (ADR-0029); `make eval-grounding` |
+| PC4.3 | Admin template flow (ADR-0004), then assign to dana. ✅ A docs-grounded map with no probe (`grounding: docs` call mode), accept = assignable template, assign = one enrollment per learner with a copy of the plan, the admin's course page (build → edit → accept → assign), and an org-wide cache impact view for admins (ADR-0030); `make eval-grounding` gained a template-map case |
 
 ## CP5: Dashboard + evals
 | PC | Build |
@@ -79,13 +79,23 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | PC6.3 | Full run-through from `make reset`, then tag `v0.1.0` |
 
 ## P1+ (only after CP6, in order)
-1. Live LLM-generated prototypes (sandboxed)
-2. Thin MCP surface: learn from Claude Code (`next_concept`, `get_lesson`, `submit_quiz`)
-3. Instructor chat (thin)
-4. Concept reordering in the map editor
-5. Per-learner diagnostic probe for org courses
-6. Dockerfiles for `web`/`api` + `docker compose --profile full`
-7. Cloud deploy
+1. **Outside knowledge in org courses** (designed, not built; see below)
+2. Live LLM-generated prototypes (sandboxed)
+3. Thin MCP surface: learn from Claude Code (`next_concept`, `get_lesson`, `submit_quiz`)
+4. Instructor chat (thin)
+5. Concept reordering in the map editor
+6. Per-learner diagnostic probe for org courses
+7. Dockerfiles for `web`/`api` + `docker compose --profile full`
+8. Cloud deploy
+
+### P1+ 1: outside knowledge in org courses
+**Why:** today an org course is the docs and nothing else (ADR-0029: the map's concepts come only from the docs, and lessons allow general knowledge only as background or as an optional note on a gap). A good instructor would also add best practice and supplementary context. **Principle:** docs stay authoritative and cited; general knowledge is added in its own structured place and always labelled, so it can't be mistaken for the org's practice.
+- **Lessons:** `LessonOutput.general_notes: list[{kind: background | best_practice | differs_from_docs, topic, note_md}]`, default `[]` (stored lessons still load; personal courses keep it empty). Validator: no `[n]` markers inside a note; a `differs_from_docs` note requires the lesson to cite the doc's side ("Acme does X; common practice is Y"). Rules in `ground-in-sources/SKILL.md`: the org's practice first, then up to ~3 notes, hedged and non-numeric, never invented org detail.
+- **Map:** `Concept.basis: docs | general` (default `docs`). The template map may add concepts the docs assume or the goal's best practice requires, marked `general`. **Code enforces the cap** (≤30% of the map, at most 3 of 12), and the admin can already remove any concept.
+- **Cite rules:** a lesson or quiz for a `general` concept needs no citation or gap (it still cites any doc that touches it).
+- **Web:** a "Beyond your docs" section in the lesson, labelled "General knowledge, not from your docs"; a "General knowledge" badge on the template map.
+- **Eval and docs:** three `make eval-grounding` cases (best-practice note on a covered concept; a general-basis concept; a doc-vs-practice conflict where the docs win), validator and cap tests, ADR-0031 amending ADR-0029, `data-model.md` for the two JSONB shape changes, `make types`. About one PC; ~$0.20 live.
+- **Not part of it:** live web search for supplementary facts. It adds cost, latency and a new capability, and compatibility with structured outputs is unverified. Evaluate separately, with Kyle's OK.
 
 ## Known follow-ups
 - ~~`StarletteDeprecationWarning`~~: resolved in PC1.1. The Anthropic SDK 1.x depends on `httpx2`, and Starlette's test client picks it up automatically.
@@ -100,7 +110,15 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - The quiz is designed in ~20 s. The lesson page prefetches it after a fresh lesson; a click during the prefetch can trigger a second design call (the first stored attempt wins, so there's no duplicate, only the cost).
 - Submit holds no DB connection during the `grade` and `explain_change` calls (reads, release, model calls, then a row-locked write). The quiz-open path does the same.
 - ~~Stale "Next" on a stored quiz result~~: resolved in PC3.4. `next_concept` is recomputed on read and a test-out offer that's been acted on is dropped; the rule, scores and why stay as recorded. A "retake" result read after a pass still says retake (it's history).
-- The trace is the learner's own calls (ADR-0027). An org admin's view of org-wide cache impact (the "cost per learner falls" story across learners) comes with CP4's admin flow.
+- The trace is the learner's own calls (ADR-0027). ~~An org admin's view of org-wide cache impact~~: resolved in PC4.3 (`/org/impact`, ADR-0030), counts and dollars only.
 - Intake guard limits (ADR-0024): code smuggled into a request and chat-style subject requests ("Tell me about the weather in Seattle") pass, because embeddings judge subject, not intent. Deferred fix: a `not_a_learning_goal` flag on the existing `diagnose.probe` call (no extra model call).
 - Intake guard misses found by the PC3.2 eval: "how to cook meth at home" (0.518) and "what's the score of the Lakers game" (0.552) pass. Not fixed by adding references (that fits the test set); the deferred probe flag above covers them too.
 - Semantic-cache recall with MiniLM is ~33% of genuine paraphrases at the safe threshold (ADR-0026). Levers to try with `make eval-cache`: a stronger local embedding model (needs Kyle's OK), or embedding the title + mastery statement without the topic.
+- Org docs are immutable via the API (ADR-0028), so a revised doc is a new doc and a new course. If admins need real revisions, versioned docs (`doc_versions`) are the upgrade; the grounded-prompt composer hashes the docs it actually sends (✔︎ PC4.2), because `make seed` upserts seeded docs.
+- Grounding checks are deterministic (real sections, verbatim quotes, markers ↔ citations), but prose can still make an uncited claim. Per-claim faithfulness is CP5's grounding judge; `make eval-grounding` holds its cases.
+- Grounded calls re-send the docs every time (~10k input tokens for the seeded set). They're first in the system prompt, so API prompt caching (a `cache_control` breakpoint after the docs, and cache-read tokens in `llm_calls`) is a small change if doc sets grow.
+- ~~PC4.3: the admin's template map needs `course_grounding` too~~: resolved in PC4.3. `grade` and `remediate.explain_change` aren't grounded (the rubric and the lesson already are).
+- The template map isn't checked against the docs by code: nothing proves each concept is covered. A concept → docs mapping (and a coverage view for admins) would make it checkable (ADR-0030); until then it's the CP5 grounding judge's job.
+- An admin can't edit an accepted template or un-assign a learner. Both are small changes on top of ADR-0004 if wanted (a new course is the workaround today, since docs are immutable).
+- Org courses are docs-only by design today (ADR-0029). Adding outside knowledge (best practices, supplementary concepts, always labelled and docs-win) is designed under P1+ 1.
+- The org docs page and the org-course form use the caller's first org membership (Phase 1 has one org per user). A multi-org picker comes with real multi-tenancy.

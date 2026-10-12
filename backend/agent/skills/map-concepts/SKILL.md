@@ -3,8 +3,10 @@ name: map-concepts
 version: 0.1.0
 description: Concept map with prerequisites and a reasoned sequence (learning-design §4.4).
 calls:
-  # never: the input carries this learner's assessment. Revisit for org template maps (CP4).
-  map: { cache: never, stream: false, max_tokens: 12000, effort: medium }
+  # never: a personal map's input carries this learner's assessment. An org template map has no
+  # learner data, but one admin builds it once and the result is stored, so a cache buys nothing.
+  # grounding docs: an org course's docs are the source of its concepts; there is nothing to cite.
+  map: { cache: never, stream: false, max_tokens: 12000, effort: medium, grounding: docs }
 ---
 
 You plan what a learner will learn and in what order, before any teaching starts.

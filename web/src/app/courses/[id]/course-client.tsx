@@ -8,6 +8,9 @@
 //   mapped   → the concept map: a dependency-ordered list with the reasoning for the order.
 //              The learner can cut concepts (warned about dependents), then accept.
 //   active   → accepted: an enrollment exists and the course is on the dashboard.
+// An org course (an admin's template, grounded in docs) skips the probe (ADR-0004): draft shows
+// the docs it is pinned to, then the same map step (concepts come from the docs), then accept,
+// which makes it assignable. Assigning gives each learner their own copy of the plan (ADR-0030).
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -16,6 +19,7 @@ import { BackLink, Page, PageMessage } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPost, type Schemas } from "@/lib/api";
@@ -23,6 +27,7 @@ import { ApiError, apiDelete, apiGet, apiPost, type Schemas } from "@/lib/api";
 type CourseDetail = Schemas["CourseDetail"];
 type Assessment = Schemas["AssessOutput"];
 type ConceptMap = Schemas["ConceptMap"];
+type Assignments = Schemas["Assignments"];
 
 export default function CoursePage() {
   const { id } = useParams<{ id: string }>();
@@ -64,6 +69,7 @@ export default function CoursePage() {
   const assessment = course.assessment ?? null;
   const conceptMap = course.concept_map ?? null;
   const { config, mission } = course;
+  const isOrg = course.scope === "org";
 
   return (
     <Page className="space-y-8">
@@ -76,7 +82,7 @@ export default function CoursePage() {
               ["Time", `${config.target_hours} h`],
               ["Mode", mission.mode],
               ["Target", config.target_level],
-              ["You said", config.self_level],
+              [isOrg ? "Learners start" : "You said", config.self_level],
               ["Stage", course.status],
             ] as const
           ).map(([k, v]) => (
@@ -88,7 +94,18 @@ export default function CoursePage() {
         </dl>
       </header>
 
-      {questions.length === 0 ? (
+      {isOrg ? (
+        <OrgTemplate
+          course={course}
+          busy={busy}
+          error={error}
+          onBuild={() => post("map", "Planning the template…")}
+          onRemove={(cid) =>
+            post(`map/concepts/${encodeURIComponent(cid)}`, "Removing…", undefined, "DELETE")
+          }
+          onAccept={() => post("accept", "Accepting…")}
+        />
+      ) : questions.length === 0 ? (
         <Card>
           <CardContent className="space-y-3">
             <p className="text-sm">
@@ -237,6 +254,7 @@ function ConceptMapCard({
   map,
   targetMinutes,
   editable,
+  template = false,
   enrollmentId,
   busy,
   error,
@@ -246,6 +264,7 @@ function ConceptMapCard({
   map: ConceptMap;
   targetMinutes: number;
   editable: boolean;
+  template?: boolean; // an org template: accepting makes it assignable, and enrolls nobody
   enrollmentId: string | null;
   busy: string | null;
   error: string | null;
@@ -267,7 +286,7 @@ function ConceptMapCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your concept map</CardTitle>
+        <CardTitle>{template ? "Course template" : "Your concept map"}</CardTitle>
         <CardDescription className="flex flex-wrap gap-x-5">
           <span>
             <span className="num text-foreground">{map.concepts.length}</span> concepts
@@ -337,7 +356,7 @@ function ConceptMapCard({
         {editable ? (
           <div className="flex items-center gap-3">
             <Button onClick={onAccept} disabled={busy !== null}>
-              {busy ?? "Accept this map"}
+              {busy ?? (template ? "Accept this template" : "Accept this map")}
             </Button>
             {error && <span className="text-destructive text-sm">{error}</span>}
           </div>
@@ -348,15 +367,210 @@ function ConceptMapCard({
                 Start learning
               </Link>
             )}
-            <p className="text-muted-foreground">
-              Accepted. It’s on your{" "}
-              <Link href="/" className="text-blue-ink underline underline-offset-4">
-                courses
-              </Link>{" "}
-              page.
-            </p>
+            {template ? (
+              <p className="text-muted-foreground">
+                Accepted. Each learner you assign it to gets their own copy of this plan.
+              </p>
+            ) : (
+              <p className="text-muted-foreground">
+                Accepted. It’s on your{" "}
+                <Link href="/" className="text-blue-ink underline underline-offset-4">
+                  courses
+                </Link>{" "}
+                page.
+              </p>
+            )}
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OrgTemplate({
+  course,
+  busy,
+  error,
+  onBuild,
+  onRemove,
+  onAccept,
+}: {
+  course: CourseDetail;
+  busy: string | null;
+  error: string | null;
+  onBuild: () => void;
+  onRemove: (conceptId: string) => void;
+  onAccept: () => void;
+}) {
+  const conceptMap = course.concept_map ?? null;
+  return (
+    <div className="space-y-8">
+      <OrgDocsCard course={course} />
+      {conceptMap ? (
+        <ConceptMapCard
+          map={conceptMap}
+          targetMinutes={Math.round(course.config.target_hours * 60)}
+          editable={course.status === "mapped"}
+          template
+          enrollmentId={null}
+          busy={busy}
+          error={error}
+          onRemove={onRemove}
+          onAccept={onAccept}
+        />
+      ) : (
+        <Card>
+          <CardContent className="space-y-3">
+            <p className="max-w-[68ch] text-sm">
+              There&apos;s no diagnostic probe for an org course. The template starts at the{" "}
+              <span className="text-strong">{course.config.self_level}</span> level you said the
+              cohort starts at, and its concepts come from the docs above. Each learner you assign
+              it to gets their own copy of the plan, which then adapts to them alone.
+            </p>
+            {error && <p className="text-destructive text-sm">{error}</p>}
+            <Button onClick={onBuild} disabled={busy !== null}>
+              {busy ?? "Build the course template"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {course.status === "active" && <AssignCard courseId={course.id} />}
+    </div>
+  );
+}
+
+function OrgDocsCard({ course }: { course: CourseDetail }) {
+  const docs = course.docs ?? [];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {course.org_name} course, grounded in {docs.length} {docs.length === 1 ? "doc" : "docs"}
+        </CardTitle>
+        <CardDescription>
+          Lessons cite the section they draw from, and say so when these docs don&apos;t cover
+          something.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ul className="divide-y border-y">
+          {docs.map((d) => (
+            <li
+              key={d.slug}
+              className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm"
+            >
+              <span className="text-strong">{d.title}</span>
+              <span className="text-muted-foreground font-mono text-xs">
+                {d.slug} · {d.section_count} sections
+              </span>
+            </li>
+          ))}
+        </ul>
+        {course.doc_set_hash && (
+          <p className="text-muted-foreground text-sm">
+            Doc set{" "}
+            <span className="text-cyan-ink font-mono" title={course.doc_set_hash}>
+              {course.doc_set_hash.slice(0, 12)}
+            </span>
+            . Lessons are only ever shared with courses grounded in exactly this set.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Who has this course: the org's members, the ones it's assigned to with how far they are
+// (counts only: an admin never sees a learner's answers). Assigning is per learner and
+// idempotent, so ticking someone already assigned changes nothing.
+function AssignCard({ courseId }: { courseId: string }) {
+  const [data, setData] = useState<Assignments | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<Assignments>(`/courses/${courseId}/assignments`).then(setData, (e: Error) =>
+      setError(e.message),
+    );
+  }, [courseId]);
+
+  async function assign() {
+    setBusy(true);
+    setError(null);
+    try {
+      setData(await apiPost<Assignments>(`/courses/${courseId}/assign`, { user_ids: picked }));
+      setPicked([]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const toggle = (id: string, on: boolean) =>
+    setPicked((p) => (on ? [...p, id] : p.filter((x) => x !== id)));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assign to learners</CardTitle>
+        <CardDescription>
+          Each learner starts from a copy of the template. Their quizzes adapt their plan, never
+          anyone else&apos;s.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!data ? (
+          <p className="text-muted-foreground text-sm">{error ?? "Loading the org’s members…"}</p>
+        ) : (
+          <ul className="divide-y border-y">
+            {data.members.map((m) => {
+              const assigned = m.enrollment_id !== null && m.enrollment_id !== undefined;
+              return (
+                <li
+                  key={m.user_id}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-sm"
+                >
+                  {assigned ? (
+                    <span className="text-strong">{m.display_name}</span>
+                  ) : (
+                    <label className="flex items-center gap-2">
+                      <Checkbox
+                        checked={picked.includes(m.user_id)}
+                        onCheckedChange={(on) => toggle(m.user_id, on)}
+                        disabled={busy}
+                      />
+                      <span className="text-strong">{m.display_name}</span>
+                    </label>
+                  )}
+                  <span className="text-muted-foreground flex items-center gap-3">
+                    <span>{m.role}</span>
+                    {assigned ? (
+                      <>
+                        <Badge variant="green">Assigned</Badge>
+                        <span className="num text-foreground">
+                          {m.concepts_complete}/{m.concepts_total}
+                        </span>
+                        concepts
+                      </>
+                    ) : (
+                      <span>Not assigned</span>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {error && data && <p className="text-destructive text-sm">{error}</p>}
+        <Button onClick={assign} disabled={busy || picked.length === 0}>
+          {busy
+            ? "Assigning…"
+            : picked.length === 0
+              ? "Pick learners to assign"
+              : `Assign to ${picked.length} ${picked.length === 1 ? "learner" : "learners"}`}
+        </Button>
       </CardContent>
     </Card>
   );

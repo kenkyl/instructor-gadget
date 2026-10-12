@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,7 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 from redisvl.utils.vectorize import HFTextVectorizer
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from tqdm import tqdm
 
 from agent.cache import ExactCache, ensure_index
 from agent.guard import IntakeGuard
@@ -17,7 +19,7 @@ from agent.llm import LLMClient
 from agent.registry import get_registry
 from agent.semantic import MODEL as SEMANTIC_MODEL
 from agent.semantic import SemanticTier
-from app.api import auth, courses, dashboard, health, learning, skills, trace
+from app.api import auth, courses, dashboard, health, learning, orgs, skills, trace
 from app.config import Settings, get_settings
 from app.services.llm_log import DbCallSink
 
@@ -41,6 +43,12 @@ async def _vector_features(
         return None, None
 
     def build() -> tuple[SemanticTier | None, IntakeGuard | None]:
+        # tqdm (the model's "Loading weights" bar) makes a multiprocessing RLock on first use. When
+        # the server is stopped with SIGTERM (`make dev`'s Ctrl-C, and every --reload restart),
+        # uvicorn re-raises it after a clean shutdown, Python never finalizes, and the resource
+        # tracker prints "leaked semaphore objects" at exit. Nothing here is multi-process, so a
+        # thread lock does the same job and creates no semaphore.
+        tqdm.set_lock(threading.RLock())
         vectorizer = HFTextVectorizer(model=SEMANTIC_MODEL)
         tier = (
             SemanticTier.build(
@@ -105,5 +113,6 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(skills.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
+app.include_router(orgs.router, prefix="/api")
 app.include_router(learning.router, prefix="/api")
 app.include_router(trace.router, prefix="/api")

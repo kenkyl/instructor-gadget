@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from agent.llm import CallContext, Done, LLMClient, Restart, TextDelta
 from agent.partial import FieldDeltas
 from agent.semantic import SemanticKey
+from agent.sources import Grounding
 from agent.types import (
     Band,
     ConceptMap,
@@ -41,6 +42,7 @@ from app.models import (
     PrereqOverride,
 )
 from app.services.dashboard import invalidate_dashboard
+from app.services.org_docs import course_grounding
 from app.services.prototypes import PrototypeView, prototype_for, prototype_view
 
 # The LessonOutput string fields streamed to the learner, in the order the model writes them.
@@ -113,6 +115,7 @@ class LessonJob:
     payload: TeachInput | RemediationLessonInput
     prototype_id: uuid.UUID | None
     semantic: SemanticKey | None = None  # core lessons only; remediation is never cached
+    grounding: Grounding | None = None  # org courses: the docs every lesson is taught from
 
 
 async def get_owned_enrollment(
@@ -258,11 +261,7 @@ async def prepare_lesson(
             prereq_titles=[concepts[p].title for p in concept.prereqs if p in concepts],
         )
         kind = LessonKind.core
-    semantic = (
-        semantic_key(payload, course.org_id, course.doc_set_hash)
-        if isinstance(payload, TeachInput)
-        else None
-    )
+    semantic = semantic_key(payload, course.org_id) if isinstance(payload, TeachInput) else None
     return LessonJob(
         user_id=user.id,
         course_id=course.id,
@@ -273,17 +272,18 @@ async def prepare_lesson(
         payload=payload,
         prototype_id=await prototype_for(db, concept, config.formats),
         semantic=semantic,
+        grounding=await course_grounding(db, course),
     )
 
 
-def semantic_key(
-    payload: TeachInput, org_id: uuid.UUID | None, doc_set_hash: str | None
-) -> SemanticKey:
+def semantic_key(payload: TeachInput, org_id: uuid.UUID | None) -> SemanticKey:
     """The lesson's semantic-cache key (ADR-0007, data-model §6.4).
 
     Embedded: the topic, then the concept's title and mastery statement. The topic is there
     because a concept title alone is ambiguous across courses ("Pool exhaustion" in a database
     course vs a thread-pool course). Everything that must match exactly goes in the bucket.
+    The doc-set hash is left to the LLM wrapper, which takes it from the docs actually in the
+    prompt (ADR-0029).
     """
     c = payload.concept
     return SemanticKey(
@@ -292,7 +292,7 @@ def semantic_key(
         target_level=payload.target_level,
         formats=payload.formats,
         analogy_domain=payload.analogy_domain,
-        doc_set_hash=doc_set_hash,
+        doc_set_hash=None,
     )
 
 
@@ -307,10 +307,18 @@ async def stream_lesson(
     ctx = CallContext(user_id=job.user_id, course_id=job.course_id, enrollment_id=job.enrollment_id)
     if isinstance(job.payload, TeachInput):
         events = llm.stream(
-            "teach-concept", "teach", job.payload, LessonOutput, ctx=ctx, semantic=job.semantic
+            "teach-concept",
+            "teach",
+            job.payload,
+            LessonOutput,
+            ctx=ctx,
+            semantic=job.semantic,
+            grounding=job.grounding,
         )
     else:
-        events = llm.stream("remediate", "lesson", job.payload, LessonOutput, ctx=ctx)
+        events = llm.stream(
+            "remediate", "lesson", job.payload, LessonOutput, ctx=ctx, grounding=job.grounding
+        )
     async for event in events:
         match event:
             case TextDelta(text=text):

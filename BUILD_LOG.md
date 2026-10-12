@@ -1,11 +1,42 @@
 # Build log
 
-> **Current status:** CP3 ✅ complete: PC3.1 semantic tier (ADR-0023), PC3.2 cache eval (ADR-0026), PC3.3 intake guard (ADR-0024), PC3.4 trace + cache impact (ADR-0027). PR #4 (`cp3/redis-deep-dive`) is ready for Kyle's review and merge. Next: after the merge, `git switch main && git pull`, then start **CP4** (J3: org course grounded in docs) on a new branch `cp4/org-grounding` with a draft PR.
+> **Current status:** CP3 ✅ merged (PR #4). **CP4 ✅ built** (J3: org course grounded in docs) on branch `cp4/org-grounding`, PR #6 ready for review. PC4.1 ✅ (docs, anchors, pinned doc sets, ADR-0028), PC4.2 ✅ (`ground-in-sources`: cited lessons and quizzes, checked by code, ADR-0029), PC4.3 ✅ (admin template flow: docs-grounded map, accept, assign; org cache impact view, ADR-0030). Next: Kyle reviews and merges PR #6, then **CP5** (dashboard + `make evals`) on a new branch from `main`. Still open: Kyle's 8 grader labels (`backend/evals/grader_calibration.yaml`, uncommitted in his working copy) are needed by PC5.2.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
 
 ---
+
+## CP4: J3, org course grounded in docs (Mon 2026-10-12, PR #6)
+
+**What we built**
+- **PC4.1, org docs:** four seeded Acme AI docs (service map, on-call runbook, a postmortem, how we ship); every heading outside a code fence becomes a citable section with a code-computed anchor; upload (admins), list and read; an org course draft is pinned to a doc set by hash and has no probe (ADR-0028).
+- **PC4.2, grounding:** `ground-in-sources`, a modifier skill. The docs go first in the prompt with each section tagged by its anchor, and the grounding rules go last. Lessons and quizzes cite with `[n]` markers and `{doc, section, quote}`; code checks that every section exists and every quote is verbatim in that section, with the one retry on a failure. The composed docs' hash keys both cache tiers (ADR-0029).
+- **PC4.3, template flow:** an org admin builds the course from the docs with no probe (a docs-grounded map starting at the cohort's level), edits it, accepts it, and assigns it. Each learner gets their own enrollment whose plan v1 is a copy of the template. The admin also gets an org-wide cache impact view: the trace's aggregate over every learner's calls, per course and per learner, with no excerpts (ADR-0030).
+- **Numbers (live, seeded docs):** a template map of 10 concepts in 10.7 s for $0.034, valid on the first attempt; dana's first lesson streamed with 10 citations, every quote verbatim; the same lesson for a second learner was an exact hit in 24 ms, saving $0.041. 245 deterministic tests.
+
+**Key prompts**
+- Kyle's model plan: Sonnet for PC4.1 and PC4.3, Opus at medium effort for PC4.2 (the grounding design), with a reminder at each switch.
+- The build brief's J3: an org course grounded in internal docs, with citations and an explicit "this isn't covered in your docs", turned into the rules in `ground-in-sources/SKILL.md`.
+- Kyle after PC4.2, asking how confident the AI was of finishing PC4.3 and PC5 unattended. The answer split them: PC4.3 and the CP4 close yes; PC5 needs his merge first and an agreed eval budget.
+
+**Decisions:** ADR-0028 (org docs are immutable; a course pins its set), ADR-0029 (our own citations with verbatim quotes, docs first, the composed docs' hash in both cache tiers), ADR-0030 (the template flow: a docs-only grounding mode for the map, accept enrolls nobody, assign copies the plan, org impact without excerpts).
+
+**Where the AI went wrong or was corrected**
+- **Found by Kyle verifying PC4.1:** the org course form kept the previous login's admin state, so dana still saw the scope selector (the API correctly refused her; the UI hadn't reset). Fixed on the branch, along with a leaked-semaphore warning at dev shutdown (tqdm's multiprocessing lock; a thread lock does the same job here).
+- **Found by Kyle verifying CP4:** after logging out, the login page still showed "Signing in…" for the last user until a refresh. The same cause as the CP3 intake-page bug: Next 16 keeps the login page alive (hidden) after `router.replace("/")`, and its handler only reset `busy` on failure. Fixed by resetting before navigating; the other submit handlers were checked and already do.
+- **PC4.2:** the first idea was the API's own Citations feature. Checking the docs showed it can't be combined with structured output (a 400), so citations became fields we validate ourselves, and a citation without its quote proved nothing (a valid anchor says nothing about the claim). A refactor of the citation checker left dead code after a `return`; a regex's `\1` pointed at the wrong group, so `` `a[3]` `` in inline code was rewritten as a citation (caught by a node run, fixed with an explicit pattern). The AI also staged Kyle's uncommitted grader labels by accident; unstaged, and left in his working copy.
+- **PC4.3:** the first live run of the grounded map would have gone through the citation rules, which describe `citations` and `not_in_docs` fields a concept map doesn't have. The fix was a per-call grounding mode (`cited` or `docs`), not editing the modifier's text, so lesson and personal prompts kept their meaning. The first org-assignment test failed for a boring reason, a test that checked the personal prompt for the string `<documents>`, which the map's own instructions mention. Dev tooling stumbles: macOS has no `timeout`, BSD `sed -i` needs an extension, and `lsof -ti :8000 :3000` silently takes only one port, which left my dev servers running until a second pass stopped them (they were mine to stop). The test course I created in the dev DB was deleted afterwards so Kyle's walkthrough starts clean.
+
+**Tradeoffs accepted**
+- Grounding is checked by code for where a claim comes from (section exists, quote verbatim), not for whether the prose stays faithful. Per-claim faithfulness and "every concept is in the docs" are the CP5 grounding judge's job (`make eval-grounding` holds the cases).
+- Docs are re-sent on every grounded call (~10k tokens, about 2¢ on Sonnet 5.5). API prompt caching on the docs prefix is a small follow-up.
+- An accepted template can't be edited and a learner can't be un-assigned; build a new course (docs are immutable).
+- The template map's concept → docs link isn't stored, so admins can't see coverage per concept.
+
+**Kyle's ★:** done by the AI at Kyle's request (speed mode). Still open: label the 8 grader answers before CP5 (his labels are in his working copy, uncommitted).
+
+**How to verify:** `make up && make migrate && make seed && make test` (245 pass), then `make eval-grounding` (~$0.15: two grounded lessons and a template map; expect citations with quotes, `not_in_docs` for Kafka lag, and 6–12 concepts drawn from the four docs). Then `make dev`: log in as **priya**, **New course** → Org course, tick the four docs, **Build the course template**, cut a concept, **Accept this template**, tick **Dana**, **Assign**. Log in as **dana**: the course is on the dashboard; open the first lesson and check the numbered sources. The "isn't covered" callout isn't reachable on demand in the app: the template map only holds concepts the docs teach (ADR-0030), so it appears only when a lesson needs a detail the docs omit. `make eval-grounding` (the Kafka lag case) and the grounding tests are where it is exercised. Back as priya, **Org impact**: assign priya too and open the same lesson to see an exact hit saving the first learner's cost. See "How to verify" in PR #6.
 
 ## CP3: Redis deep dive (Sun 2026-10-11, PR #4)
 

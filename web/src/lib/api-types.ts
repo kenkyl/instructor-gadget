@@ -211,7 +211,8 @@ export interface paths {
         put?: never;
         /**
          * Map Concepts
-         * @description Generate the concept map (once; afterwards the same map is returned).
+         * @description Generate the concept map (once; afterwards the same map is returned). An org course's
+         *     map is the cohort template, grounded in its docs, with no probe.
          */
         post: operations["map_concepts_api_courses__course_id__map_post"];
         delete?: never;
@@ -251,9 +252,130 @@ export interface paths {
         put?: never;
         /**
          * Accept
-         * @description Accept the map: creates the enrollment, plan v1 and progress rows (idempotent).
+         * @description Accept the map (idempotent). Personal: creates the enrollment, plan v1 and progress rows.
+         *     Org: the template becomes assignable; nobody is enrolled.
          */
         post: operations["accept_api_courses__course_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assignments
+         * @description An org course's members and who has it assigned (org admins only, like the course).
+         */
+        get: operations["assignments_api_courses__course_id__assignments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/courses/{course_id}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign
+         * @description Assign the accepted template to org members: each gets an enrollment whose plan starts
+         *     as a copy of it (idempotent per learner).
+         */
+        post: operations["assign_api_courses__course_id__assign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Orgs
+         * @description The orgs the caller belongs to, with their role (who may upload docs and build courses).
+         */
+        get: operations["my_orgs_api_orgs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org_slug}/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Docs */
+        get: operations["list_docs_api_orgs__org_slug__docs_get"];
+        put?: never;
+        /**
+         * Upload Doc
+         * @description Add a doc (admins only). Uploading the same doc again returns it with a 200.
+         */
+        post: operations["upload_doc_api_orgs__org_slug__docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org_slug}/docs/{doc_slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Doc */
+        get: operations["get_doc_api_orgs__org_slug__docs__doc_slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org_slug}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Impact
+         * @description What the cache did across the org's courses: calls, hit rate, $ spent and saved, per course
+         *     and per learner (admins only; counts and dollars, never excerpts).
+         */
+        get: operations["impact_api_orgs__org_slug__impact_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -484,6 +606,52 @@ export interface components {
              */
             adjustment_message?: string | null;
         };
+        /** AssignIn */
+        AssignIn: {
+            /** User Ids */
+            user_ids: string[];
+        };
+        /**
+         * AssigneeView
+         * @description An org member, and where they are in this course if it was assigned to them.
+         */
+        AssigneeView: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+            /** Enrollment Id */
+            enrollment_id?: string | null;
+            status?: components["schemas"]["EnrollmentStatus"] | null;
+            /**
+             * Concepts Total
+             * @default 0
+             */
+            concepts_total: number;
+            /**
+             * Concepts Complete
+             * @default 0
+             */
+            concepts_complete: number;
+        };
+        /** Assignments */
+        Assignments: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Assignable */
+            assignable: boolean;
+            /** Members */
+            members: components["schemas"]["AssigneeView"][];
+        };
         /**
          * Band
          * @description Mastery bands (spec §4.9). Stored in concept_progress.band; set by pedagogy.band().
@@ -535,12 +703,27 @@ export interface components {
          * @enum {string}
          */
         CallStatus: "ok" | "error";
-        /** Citation */
+        /**
+         * Citation
+         * @description Where a grounded claim comes from (spec §5). `doc` and `section` are copied from the
+         *     source tags in the prompt; `quote` lets code check that the section really says it.
+         */
         Citation: {
-            /** Doc */
+            /**
+             * Doc
+             * @description The doc's slug, from <document slug=…>
+             */
             doc: string;
-            /** Section */
+            /**
+             * Section
+             * @description The section's anchor, from <section anchor=…>
+             */
             section: string;
+            /**
+             * Quote
+             * @description Verbatim words from that section that support the claim
+             */
+            quote: string;
         };
         /** Concept */
         Concept: {
@@ -645,6 +828,9 @@ export interface components {
             id: string;
             /** Title */
             title: string;
+            scope: components["schemas"]["CourseScope"];
+            /** Org Name */
+            org_name?: string | null;
             status: components["schemas"]["CourseStatus"];
             config: components["schemas"]["CourseConfig"];
             mission: components["schemas"]["Mission"];
@@ -658,6 +844,22 @@ export interface components {
             concept_map?: components["schemas"]["ConceptMap"] | null;
             /** Enrollment Id */
             enrollment_id?: string | null;
+            /** Docs */
+            docs?: components["schemas"]["CourseDocRef"][];
+            /** Doc Set Hash */
+            doc_set_hash?: string | null;
+        };
+        /**
+         * CourseDocRef
+         * @description A doc a course is grounded in, as the course page lists it.
+         */
+        CourseDocRef: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Section Count */
+            section_count: number;
         };
         /**
          * CourseIntake
@@ -666,7 +868,16 @@ export interface components {
         CourseIntake: {
             config: components["schemas"]["CourseConfig"];
             mission: components["schemas"]["Mission"];
+            /** Org Slug */
+            org_slug?: string | null;
+            /** Doc Slugs */
+            doc_slugs?: string[];
         };
+        /**
+         * CourseScope
+         * @enum {string}
+         */
+        CourseScope: "personal" | "org";
         /**
          * CourseStatus
          * @enum {string}
@@ -734,6 +945,16 @@ export interface components {
              * @enum {string}
              */
             served_from: "cache" | "db";
+        };
+        /**
+         * DocSection
+         * @description One citable section of a doc: stored in `org_docs.sections` (JSONB).
+         */
+        DocSection: {
+            /** Anchor */
+            anchor: string;
+            /** Heading */
+            heading: string;
         };
         /** EnrollmentDetail */
         EnrollmentDetail: {
@@ -850,14 +1071,14 @@ export interface components {
             diagram_mermaid: string;
             /**
              * Citations
-             * @description Org docs only
+             * @description Org docs only: citations[n-1] backs each [n] marker
              */
             citations?: components["schemas"]["Citation"][];
             /**
              * Not In Docs
              * @description Org docs only
              */
-            not_in_docs?: string[];
+            not_in_docs?: components["schemas"]["NotInDocs"][];
         };
         /** LessonView */
         LessonView: {
@@ -909,6 +1130,121 @@ export interface components {
             deadline?: string | null;
             /** Analogy Domain */
             analogy_domain?: string | null;
+        };
+        /**
+         * NotInDocs
+         * @description Something the learner needs that the org's docs don't cover (spec §5).
+         */
+        NotInDocs: {
+            /**
+             * Point
+             * @description What the docs don't cover, as a short topic or question
+             */
+            point: string;
+            /**
+             * General Knowledge
+             * @description Optional general (not org-specific) knowledge on it, or null
+             */
+            general_knowledge: string | null;
+        };
+        /** OrgCourseImpact */
+        OrgCourseImpact: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Title */
+            title: string;
+            /** Learners */
+            learners: number;
+            impact: components["schemas"]["CacheImpact"];
+        };
+        /** OrgDocDetail */
+        OrgDocDetail: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Section Count */
+            section_count: number;
+            /** Chars */
+            chars: number;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Content Md */
+            content_md: string;
+            /** Sections */
+            sections: components["schemas"]["DocSection"][];
+        };
+        /** OrgDocIn */
+        OrgDocIn: {
+            /** Title */
+            title: string;
+            /** Content Md */
+            content_md: string;
+            /**
+             * Slug
+             * @description Defaults to one made from the title
+             */
+            slug?: string | null;
+        };
+        /** OrgDocSummary */
+        OrgDocSummary: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Section Count */
+            section_count: number;
+            /** Chars */
+            chars: number;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** OrgImpactResponse */
+        OrgImpactResponse: {
+            /** Org Name */
+            org_name: string;
+            impact: components["schemas"]["CacheImpact"];
+            /** Courses */
+            courses: components["schemas"]["OrgCourseImpact"][];
+            /** Learners */
+            learners: components["schemas"]["OrgLearnerImpact"][];
+        };
+        /** OrgLearnerImpact */
+        OrgLearnerImpact: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * First Call At
+             * Format: date-time
+             */
+            first_call_at: string;
+            impact: components["schemas"]["CacheImpact"];
+        };
+        /** OrgMembershipOut */
+        OrgMembershipOut: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            role: components["schemas"]["Role"];
         };
         /** OverrideRequest */
         OverrideRequest: {
@@ -1043,6 +1379,7 @@ export interface components {
             /** Correct */
             correct: boolean;
             misconception: components["schemas"]["Misbelief"] | null;
+            source?: components["schemas"]["Citation"] | null;
         };
         /**
          * QuizResult
@@ -1130,6 +1467,11 @@ export interface components {
             angle: string;
             misconception: components["schemas"]["Misbelief"] | null;
         };
+        /**
+         * Role
+         * @enum {string}
+         */
+        Role: "member" | "admin";
         /**
          * Rule
          * @description Which rule fired after a graded attempt. Stored in plan_versions.rule when it changes the
@@ -1675,6 +2017,244 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assignments_api_courses__course_id__assignments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Assignments"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_api_courses__course_id__assign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Assignments"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_orgs_api_orgs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgMembershipOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_docs_api_orgs__org_slug__docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDocSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_doc_api_orgs__org_slug__docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgDocIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDocDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_doc_api_orgs__org_slug__docs__doc_slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+                doc_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDocDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    impact_api_orgs__org_slug__impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgImpactResponse"];
                 };
             };
             /** @description Validation Error */

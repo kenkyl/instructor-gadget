@@ -8,6 +8,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { BackLink, Page } from "@/components/app-shell";
+import { DocCitation } from "@/components/doc-citation";
 import { Markdown } from "@/components/markdown";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { OverrideGate } from "@/components/override-gate";
@@ -15,6 +16,7 @@ import { PrototypeFrame } from "@/components/prototype-frame";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
+import { citeId } from "@/lib/citations";
 import { CACHE_LABEL } from "@/lib/labels";
 import { postSse } from "@/lib/sse";
 
@@ -82,6 +84,10 @@ export default function LessonPage() {
   }, [enrollmentId, conceptId, router, attempt]);
 
   const shown: Fields = lesson?.content ?? fields;
+  // Org courses (ADR-0029): sources and gaps arrive with the finished lesson, not mid-stream.
+  const citations = lesson?.content.citations ?? [];
+  const notInDocs = lesson?.content.not_in_docs ?? [];
+  const cited = citations.length > 0;
   const streaming = lesson === null && error === null && !locked;
   const concept = plan?.concept_map.concepts.find((c) => c.id === conceptId);
   const position = plan ? plan.progress.findIndex((p) => p.concept_id === conceptId) + 1 : 0;
@@ -155,10 +161,27 @@ export default function LessonPage() {
         </div>
       )}
 
-      {shown.explanation_md && <Markdown>{shown.explanation_md}</Markdown>}
+      {shown.explanation_md && <Markdown cited={cited}>{shown.explanation_md}</Markdown>}
+      {notInDocs.length > 0 && (
+        <section className="border-yellow bg-yellow/10 max-w-[68ch] space-y-2 rounded-md border-l-2 px-4 py-3">
+          <p className="text-yellow-ink font-semibold">This isn&apos;t covered in your docs</p>
+          <ul className="space-y-2">
+            {notInDocs.map((n) => (
+              <li key={n.point}>
+                <span className="text-strong">{n.point}</span>
+                {n.general_knowledge && (
+                  <span className="text-muted-foreground block text-sm">
+                    General knowledge, not from your docs: {n.general_knowledge}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {shown.example_md && (
         <LessonSection title="Worked example">
-          <Markdown>{shown.example_md}</Markdown>
+          <Markdown cited={cited}>{shown.example_md}</Markdown>
         </LessonSection>
       )}
       {shown.diagram_mermaid && (
@@ -176,6 +199,18 @@ export default function LessonPage() {
             Change the knobs until something surprises you, then work out why.
           </p>
           <PrototypeFrame title={lesson.prototype.title} html={lesson.prototype.html} />
+        </LessonSection>
+      )}
+      {cited && (
+        <LessonSection title="Sources">
+          <ol className="max-w-[68ch] space-y-3">
+            {citations.map((c, i) => (
+              <li key={i} id={citeId(i + 1)} className="flex scroll-mt-24 gap-3">
+                <span className="num text-muted-foreground">[{i + 1}]</span>
+                <DocCitation citation={c} />
+              </li>
+            ))}
+          </ol>
         </LessonSection>
       )}
       {lesson && (
