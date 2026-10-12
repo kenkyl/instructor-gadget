@@ -2,6 +2,8 @@
 
 How Instructor is put together in Phase 1: the components, the learning loop as a sequence, where state lives, and the four ways it uses Redis. Decisions are linked to their ADRs in [`decisions.md`](decisions.md); every table, JSONB shape and key is in [`data-model.md`](data-model.md).
 
+A generated overview with the three main request flows, rendered from a reviewed model, is in [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md). This page is the hand-written explanation; the two are kept consistent.
+
 ## Components
 
 ```mermaid

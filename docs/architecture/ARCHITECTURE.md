@@ -2,15 +2,15 @@
 
 # Instructor architecture
 
-Instructor is an adaptive learning-course agent. A Next.js app proxies every /api call to a FastAPI backend, which runs product skills through an in-process agent package. The agent package is the only caller of the Anthropic API. Postgres is the source of truth; Redis holds sessions and caches that can always be rebuilt.
+Instructor is an adaptive learning-course agent. A Next.js app proxies every /api call to a FastAPI backend, which runs surface-neutral services over an in-process agent package. Skills write the language; deterministic code decides scores, mastery, gating and re-planning. Every model call goes through one wrapper that checks two Redis cache tiers before the Anthropic API. Postgres is the source of truth; Redis holds sessions and caches that can always be rebuilt.
 
 **Highlights**
 
 - Postgres is the only source of truth; Redis holds nothing that can't be rebuilt.
+- Skills do language; code does decisions: scoring, mastery, gating, adaptation and FSRS are pure functions in agent/pedagogy.py.
 - Every LLM call goes through one wrapper: Pydantic-validated output, one retry, every attempt logged to llm_calls.
-- The browser only talks to Next.js, which proxies /api/* to FastAPI, so the session cookie stays same-origin.
-- ANTHROPIC_API_KEY lives in .env and is read by the API process only; the browser never sees it.
-- Both data stores bind to 127.0.0.1, so they are not exposed on the network.
+- diagnose, grade and remediate are never cached, and neither is any request that carries a learner's misconceptions.
+- ANTHROPIC_API_KEY is read by the API process only, and both data stores bind to 127.0.0.1.
 
 ## Overview
 
@@ -22,6 +22,10 @@ flowchart TB
     c_web["<b>Web app</b><br/>Next.js 16, :3000"]
     c_api["<b>API</b><br/>FastAPI, :8000"]
     c_agent["<b>Agent package</b><br/>In-process Python"]
+    c_pedagogy["<b>Pedagogy rules</b><br/>Pure code, FSRS"]
+    c_cache["<b>LLM cache tiers</b><br/>RedisVL, local MiniLM"]
+    c_sources["<b>Grounding</b><br/>In-process Python"]
+    c_guard["<b>Intake guard</b><br/>RedisVL router, local MiniLM"]
     subgraph b_docker["Docker Compose"]
       c_postgres[("<b>Postgres</b><br/>Postgres 16")]
       c_redis[("<b>Redis</b><br/>Redis 8.10")]
@@ -33,9 +37,15 @@ flowchart TB
   c_learner -->|"1. uses the app"| c_web
   c_web -->|"2. proxies /api/*"| c_api
   c_api -->|"3. runs skill calls"| c_agent
-  c_agent -->|"4. structured-output request"| c_anthropic
+  c_agent ---->|"4. structured-output request"| c_anthropic
   c_api -->|"rows and llm_calls log"| c_postgres
-  c_api -->|"sessions, dashboard cache"| c_redis
+  c_api ---->|"sessions, dashboard cache"| c_redis
+  c_api -->|"scores, gates, adapts"| c_pedagogy
+  c_api -->|"screens new courses"| c_guard
+  c_agent -->|"lookup, then store"| c_cache
+  c_agent -->|"grounds and checks"| c_sources
+  c_cache -->|"exact + vector entries"| c_redis
+  c_guard --->|"route vectors"| c_redis
   classDef client fill:#8957e526,stroke:#8957e5,stroke-width:1.5px
   classDef service fill:#218bff26,stroke:#218bff,stroke-width:1.5px
   classDef module fill:#1b998b26,stroke:#1b998b,stroke-width:1.5px
@@ -43,7 +53,7 @@ flowchart TB
   classDef external fill:#8c959f1f,stroke:#8c959f,stroke-dasharray:5 3,stroke-width:1.5px
   class c_learner client
   class c_web,c_api service
-  class c_agent module
+  class c_agent,c_pedagogy,c_cache,c_sources,c_guard module
   class c_postgres,c_redis datastore
   class c_anthropic external
   style b_your_machine fill:none,stroke:#8b949e,stroke-width:1px,stroke-dasharray:6 4
@@ -66,28 +76,36 @@ flowchart TB
 
 | Component | Kind | Runs in | Responsibility | Evidence |
 |---|---|---|---|---|
-| **Learner**<br><sub>Browser</sub> | client | Your machine | Takes a course through the browser: intake, diagnostic, lessons and quizzes. | [`web/src/app/`](../../web/src/app/) |
+| **Learner**<br><sub>Browser</sub> | client | Your machine | Takes a course through the browser: intake, diagnostic, lessons and quizzes; admins also manage org docs and courses. | [`web/src/app/`](../../web/src/app/) |
 | **Web app**<br><sub>Next.js 16, :3000</sub> | service | Your machine | Renders the UI, redirects visitors without a session cookie, and proxies /api/* to FastAPI. | [`web/next.config.ts`](../../web/next.config.ts), [`web/src/proxy.ts`](../../web/src/proxy.ts), [`web/src/app/`](../../web/src/app/) |
-| **API**<br><sub>FastAPI, :8000</sub> | service | Your machine | Authenticates the user, enforces ownership, runs services and routes skill calls to the agent. | [`backend/app/main.py`](../../backend/app/main.py), [`backend/app/api/`](../../backend/app/api/), [`backend/app/auth.py`](../../backend/app/auth.py), [`backend/app/services/`](../../backend/app/services/) |
-| **Agent package**<br><sub>In-process Python</sub><br><sub>Includes: Skill registry, LLM client wrapper, diagnose skill</sub> | module | Your machine | Loads product skills and prompts, and makes every model call through one validated, logged client. | [`backend/agent/registry.py`](../../backend/agent/registry.py), [`backend/agent/llm.py`](../../backend/agent/llm.py), [`backend/agent/skills/`](../../backend/agent/skills/) |
-| **Postgres**<br><sub>Postgres 16</sub> | datastore | Your machine › Docker Compose | Source of truth for users, courses, enrollments, assessments, progress and the LLM call log. | [`docker-compose.yml`](../../docker-compose.yml), [`backend/app/models.py`](../../backend/app/models.py), [`backend/migrations/`](../../backend/migrations/), [`docs/data-model.md`](../data-model.md) |
-| **Redis**<br><sub>Redis 8.10</sub> | datastore | Your machine › Docker Compose | Holds login sessions and the dashboard cache; LLM response caches are planned for CP2/CP3. | [`docker-compose.yml`](../../docker-compose.yml), [`backend/app/auth.py`](../../backend/app/auth.py), [`backend/app/services/dashboard.py`](../../backend/app/services/dashboard.py), [`docs/data-model.md#6-redis-key-space`](../data-model.md#6-redis-key-space) |
-| **Anthropic API**<br><sub>claude-sonnet-5-5 by default</sub> | external | Anthropic | Generates structured diagnostic, lesson and grading output for the skills. | [`backend/agent/llm.py`](../../backend/agent/llm.py), [`.env.example`](../../.env.example) |
+| **API**<br><sub>FastAPI, :8000</sub><br><sub>Includes: Routers (web surface), Services</sub> | service | Your machine | Authenticates the user, enforces ownership and the unlock gate, and runs the services that call the agent. | [`backend/app/main.py`](../../backend/app/main.py), [`backend/app/api/`](../../backend/app/api/), [`backend/app/auth.py`](../../backend/app/auth.py), [`backend/app/services/`](../../backend/app/services/) |
+| **Agent package**<br><sub>In-process Python</sub><br><sub>Includes: Skill registry, LLM client wrapper, Skills</sub> | module | Your machine | Loads product skills and prompts, and makes every model call through one validated, logged client. | [`backend/agent/registry.py`](../../backend/agent/registry.py), [`backend/agent/llm.py`](../../backend/agent/llm.py), [`backend/agent/skills/`](../../backend/agent/skills/) |
+| **Pedagogy rules**<br><sub>Pure code, FSRS</sub><br><sub>Includes: pedagogy, plan (DAG validation, diff)</sub> | module | Your machine | Decides scores, mastery, bands, the unlock gate, adaptation rules and review dates; no model involved. | [`backend/agent/pedagogy.py`](../../backend/agent/pedagogy.py), [`backend/agent/plan.py`](../../backend/agent/plan.py) |
+| **LLM cache tiers**<br><sub>RedisVL, local MiniLM</sub><br><sub>Includes: Exact tier, Semantic tier</sub> | module | Your machine | Serves a repeated or reworded request without a model call: exact key first, then a tag-filtered semantic match. | [`backend/agent/cache.py`](../../backend/agent/cache.py), [`backend/agent/semantic.py`](../../backend/agent/semantic.py), [`docs/architecture.md#four-uses-of-redis`](../architecture.md#four-uses-of-redis) |
+| **Grounding**<br><sub>In-process Python</sub> | module | Your machine | Splits org docs into anchored sections and checks every citation's section and verbatim quote. | [`backend/agent/sources.py`](../../backend/agent/sources.py), [`backend/app/services/org_docs.py`](../../backend/app/services/org_docs.py), [`docs/architecture.md#org-courses-j3`](../architecture.md#org-courses-j3) |
+| **Intake guard**<br><sub>RedisVL router, local MiniLM</sub> | module | Your machine | Rejects crude, off-topic, dangerous and prompt-injection course requests before anything is stored or sent. | [`backend/agent/guard.py`](../../backend/agent/guard.py), [`backend/app/api/courses.py`](../../backend/app/api/courses.py) |
+| **Postgres**<br><sub>Postgres 16</sub> | datastore | Your machine › Docker Compose | Source of truth for users, orgs, docs, courses, plans, progress, lessons, quizzes and the LLM call log. | [`docker-compose.yml`](../../docker-compose.yml), [`backend/app/models.py`](../../backend/app/models.py), [`backend/migrations/`](../../backend/migrations/), [`docs/data-model.md`](../data-model.md) |
+| **Redis**<br><sub>Redis 8.10</sub> | datastore | Your machine › Docker Compose | Holds sessions, the dashboard cache and both LLM cache tiers; everything in it can be rebuilt. | [`docker-compose.yml`](../../docker-compose.yml), [`backend/app/auth.py`](../../backend/app/auth.py), [`backend/app/services/dashboard.py`](../../backend/app/services/dashboard.py), [`backend/agent/cache.py`](../../backend/agent/cache.py), [`backend/agent/semantic.py`](../../backend/agent/semantic.py), [`backend/agent/guard.py`](../../backend/agent/guard.py), [`docs/data-model.md#6-redis-key-space`](../data-model.md#6-redis-key-space) |
+| **Anthropic API**<br><sub>claude-sonnet-5-5 by default</sub> | external | Anthropic | Generates structured probe, map, lesson, quiz, grading and re-plan output for the skills. | [`backend/agent/llm.py`](../../backend/agent/llm.py), [`.env.example`](../../.env.example) |
 
 ## Where state lives
 
 | Store | Runs in | Holds | Lifetime | Reached by |
 |---|---|---|---|---|
-| **Postgres** | Your machine › Docker Compose | Orgs, users, courses, enrollments, assessments, plans, progress | Durable | API |
-| **Postgres** | Your machine › Docker Compose | llm_calls: one row per model request | Durable | API |
-| **Redis** | Your machine › Docker Compose | Login sessions (sess:{token}, hash) | 8 h TTL, deleted on logout | API |
-| **Redis** | Your machine › Docker Compose | Dashboard cache (dash:{user_id}, JSON) | 10 min TTL, deleted on writes | API |
+| **Postgres** | Your machine › Docker Compose | Orgs, users, courses, enrollments, plan versions, progress, lessons, quiz attempts, misconceptions | Durable | API |
+| **Postgres** | Your machine › Docker Compose | Org docs: immutable, sectioned, hashed | Durable | API |
+| **Postgres** | Your machine › Docker Compose | llm_calls: one row per model attempt | Durable | API |
+| **Redis** | Your machine › Docker Compose | Login sessions (sess:{token}, hash) | 8 h TTL, deleted on logout | API, LLM cache tiers, Intake guard |
+| **Redis** | Your machine › Docker Compose | Dashboard cache (dash:{user_id}, JSON) | 10 min TTL, deleted on writes | API, LLM cache tiers, Intake guard |
+| **Redis** | Your machine › Docker Compose | Exact LLM cache (llm:exact:{sha256}, JSON) | 7 day TTL | API, LLM cache tiers, Intake guard |
+| **Redis** | Your machine › Docker Compose | Semantic LLM cache (idx:llm_semantic, vector index) | 7 day TTL per entry | API, LLM cache tiers, Intake guard |
+| **Redis** | Your machine › Docker Compose | Intake guard routes (idx:intake_guard, vector index) | Rebuilt at startup | API, LLM cache tiers, Intake guard |
 
 ## Flows
 
 ### Generate diagnostic questions
 
-After a learner creates a course, the API asks the diagnose skill for probe questions and stores them.
+After a learner creates a course, the API asks the diagnose skill for probe questions and stores them. Diagnose is never cached.
 
 ```mermaid
 sequenceDiagram
@@ -112,6 +130,62 @@ sequenceDiagram
   c_api-->>c_web: Course detail with the questions
 ```
 
+### Open a concept's lesson
+
+The unlock gate runs first. A stored lesson opens instantly; otherwise the lesson is served from the exact or semantic cache, or generated and streamed.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant c_learner as Learner
+  participant c_web as Web app
+  participant c_api as API
+  participant c_postgres as Postgres
+  participant c_pedagogy as Pedagogy rules
+  participant c_agent as Agent package
+  participant c_cache as LLM cache tiers
+  participant c_redis as Redis
+  participant c_anthropic as Anthropic API
+  c_learner->>c_web: Open a concept (lesson stream)
+  c_web->>c_api: POST .../lesson (SSE) via the proxy
+  c_api->>c_postgres: Load plan, progress, any stored lesson
+  c_api->>c_pedagogy: Unlocked? Prerequisites at least solid
+  c_api->>c_agent: Run teach-concept.teach
+  c_agent->>c_cache: Exact key, then semantic match
+  c_cache->>c_redis: JSON.GET, then vector search with tag filter
+  c_agent->>c_anthropic: On a miss: stream structured output
+  c_agent->>c_cache: Store the lesson in both tiers
+  c_agent->>c_postgres: llm_calls row: tokens, latency, cache result
+  c_api-->>c_web: SSE field deltas, then done
+```
+
+### Grade a quiz and adapt the plan
+
+Grading is never cached. Code scores, sets mastery and the review date, and decides whether the plan changes; a skill only writes the words.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant c_learner as Learner
+  participant c_web as Web app
+  participant c_api as API
+  participant c_pedagogy as Pedagogy rules
+  participant c_agent as Agent package
+  participant c_anthropic as Anthropic API
+  participant c_postgres as Postgres
+  participant c_redis as Redis
+  c_learner->>c_web: Submit quiz answers
+  c_web->>c_api: POST .../quiz-attempts/{id}/submit
+  c_api->>c_pedagogy: Score the multiple-choice answers
+  c_api->>c_agent: Run grade on the short answer
+  c_agent->>c_anthropic: Structured-output request
+  c_api->>c_pedagogy: Combine, mastery, band, FSRS date, rule
+  c_api->>c_agent: If re-planning: remediate.explain_change
+  c_api->>c_postgres: Progress, misconception, plan version N+1
+  c_api->>c_redis: DEL dash:{user_id}
+  c_api-->>c_web: Score, feedback, band, what happens next
+```
+
 ## Notes
 
 Kept exactly as written. They steer what the diagram includes.
@@ -120,6 +194,10 @@ Kept exactly as written. They steer what the diagram includes.
 >
 > <sub>Added 2026-10-11</sub>
 
+> output to docs/architecture; keep consistent with docs/architecture.md (current hand-written doc); regenerate from the current code (v0.1.0). Do not modify README.md yet: the README embed decision is the user's.
+>
+> <sub>Added 2026-10-12</sub>
+
 ---
 
-<sub>Generated by visualizer from [`architecture.json`](architecture.json). Model as of commit `dd0d0ce` (2026-10-11). Content hash `bd886534ec3a`.</sub>
+<sub>Generated by visualizer from [`architecture.json`](architecture.json). Model as of commit `104e5af` (2026-10-12). Content hash `78ffea528ba3`.</sub>
