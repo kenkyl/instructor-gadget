@@ -852,10 +852,15 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 Cache-aside: `JSON.GET`; on a miss, query Postgres, `JSON.SET` plus `EXPIRE`, return. Writes go to Postgres and then **delete** the key; the next read refills it. We delete rather than patching paths in place: patching could drift from Postgres if two writers race. Native JSON still lets a client read one path, e.g. `JSON.GET dash:{id} $.courses[*].due_count`.
 
 ```json
-{ "courses": [{ "enrollment_id": "e001…0001", "title": "Technical readiness at Acme AI", "scope": "org",
-                "progress": 0.4, "bands": { "solid": 2, "learning": 1, "shaky": 1, "locked": 4 },
-                "due_count": 1, "badge": null }] }
+{ "user": { "…": "CurrentUser" }, "generated_at": "2026-10-12T15:00:00Z",
+  "courses": [{ "enrollment_id": "e001…0001", "course_id": "c001…0001", "title": "Technical readiness at Acme AI",
+                "scope": "org", "org_name": "Acme AI", "status": "active", "completed_at": null,
+                "concepts_total": 6, "concepts_complete": 2, "due_count": 1,
+                "bands": { "not_started": 3, "shaky": 1, "learning": 0, "solid": 1, "mastered": 1 },
+                "concepts": [{ "concept_id": "cache-aside", "title": "Cache-aside", "band": "solid",
+                               "complete": true, "due": true }, "…in plan order"] }] }
 ```
+Validated on read as `Dashboard` (`app/services/dashboard.py`). `bands` and `due` come from `pedagogy.band_counts` and `pedagogy.is_due` (✔︎ PC5.1): a concept with no band is *not started* (never quizzed), not shaky; `completed_at` set = the course's badge. An org admin's templates aren't here (no enrollment): `GET /api/orgs/{slug}/courses` lists them (PC5.1).
 
 ### 6.3 Exact LLM cache: `llm:exact:{sha256}` (native JSON + index)
 - **Key:** sha256 of the canonical JSON of `{skill, call, model, prompt_version, cacheable inputs}`, plus `doc_set_hash` for a grounded (org) call, whose docs are in the system prompt rather than the input; a grounded call's `prompt_version` also includes `ground-in-sources` (ADR-0029). Learner ids are never part of it.

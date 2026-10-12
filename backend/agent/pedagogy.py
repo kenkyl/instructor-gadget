@@ -6,7 +6,7 @@ these, and write the results. The LLM never decides any of this; it only writes 
 the remediation content.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -224,3 +224,29 @@ def insert_remediation(
 def course_complete(bands: Mapping[str, Band | None]) -> bool:
     """Every concept in the plan (remediations included) is solid or better (spec J2 step 7)."""
     return all(at_least(b, UNLOCK_BAND) for b in bands.values())
+
+
+# --- Dashboard summary (spec J2 step 7) -----------------------------------------------------
+BandKey = Literal["not_started", "shaky", "learning", "solid", "mastered"]
+BAND_KEYS: tuple[BandKey, ...] = ("not_started", "shaky", "learning", "solid", "mastered")
+_BAND_KEY: dict[Band, BandKey] = {
+    Band.shaky: "shaky",
+    Band.learning: "learning",
+    Band.solid: "solid",
+    Band.mastered: "mastered",
+}
+
+
+def band_counts(bands: Iterable[Band | None]) -> dict[BandKey, int]:
+    """How many concepts sit in each band, weakest first. No band yet = not started (never
+    quizzed), which is not the same as shaky (quizzed, low evidence)."""
+    counts: dict[BandKey, int] = dict.fromkeys(BAND_KEYS, 0)
+    for b in bands:
+        counts["not_started" if b is None else _BAND_KEY[b]] += 1
+    return counts
+
+
+def is_due(due: datetime | None, now: datetime) -> bool:
+    """Due for review: FSRS has scheduled it and the date has passed. Never-quizzed concepts
+    have no card, so they're never due (they're simply next)."""
+    return due is not None and due <= now

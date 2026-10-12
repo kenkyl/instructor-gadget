@@ -507,6 +507,47 @@ async def assign_course(
     return await list_assignments(db, course)
 
 
+class OrgCourseSummary(BaseModel):
+    """An org course as its admin sees it in a list: a way back to a template, which has no
+    enrollment for the admin and so isn't on their dashboard."""
+
+    course_id: uuid.UUID
+    title: str
+    status: CourseStatus
+    doc_count: int
+    assigned_count: int
+
+
+async def list_org_courses(
+    db: AsyncSession, user: CurrentUser, org_slug: str
+) -> list[OrgCourseSummary]:
+    """Every course in the org, newest first, with how many learners it's assigned to (admins
+    only: drafts and templates are the admin's work in progress)."""
+    org, role = await org_docs.member_org(db, user, org_slug)
+    org_docs.require_admin(role)
+    assigned = (
+        select(Enrollment.course_id, func.count().label("n"))
+        .group_by(Enrollment.course_id)
+        .subquery()
+    )
+    rows = await db.execute(
+        select(Course, assigned.c.n)
+        .outerjoin(assigned, assigned.c.course_id == Course.id)
+        .where(Course.org_id == org.id)
+        .order_by(Course.created_at.desc())
+    )
+    return [
+        OrgCourseSummary(
+            course_id=c.id,
+            title=c.title,
+            status=c.status,
+            doc_count=len(c.doc_ids),
+            assigned_count=n or 0,
+        )
+        for c, n in rows.all()
+    ]
+
+
 async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> CourseDetail:
     assessment = await latest_assessment(db, course.id, user.id)
     questions: list[ProbeQuestionView] = []

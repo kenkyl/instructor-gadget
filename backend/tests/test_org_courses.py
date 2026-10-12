@@ -292,3 +292,19 @@ def test_the_admin_sees_the_cache_impact_across_the_org_without_excerpts(client,
     assert client.get("/api/orgs/acme/impact").status_code == 403
     login(client, "kyle")
     assert client.get("/api/orgs/acme/impact").status_code == 404
+
+
+def test_the_admin_lists_the_org_courses_they_manage(client, fake_llm) -> None:
+    course_id, _ = _accepted_and_assigned(client, fake_llm)
+    login(client, "priya")
+    res = client.get("/api/orgs/acme/courses")
+    assert res.status_code == 200
+    assert [(c["course_id"], c["status"], c["assigned_count"]) for c in res.json()] == [
+        (course_id, "active", 1)
+    ]
+    assert res.json()[0]["doc_count"] >= 1
+
+    login(client, "dana")
+    assert client.get("/api/orgs/acme/courses").status_code == 403
+    login(client, "kyle")
+    assert client.get("/api/orgs/acme/courses").status_code == 404

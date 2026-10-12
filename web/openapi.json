@@ -1134,6 +1134,69 @@
         }
       }
     },
+    "/api/orgs/{org_slug}/courses": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "summary": "Org Courses",
+        "description": "The org's courses, drafts and templates included, with doc and learner counts (admins\nonly). The admin's way back to a template, which isn't on their dashboard.",
+        "operationId": "org_courses_api_orgs__org_slug__courses_get",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Slug"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrgCourseSummary"
+                  },
+                  "title": "Response Org Courses Api Orgs  Org Slug  Courses Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enrollments/{enrollment_id}": {
       "get": {
         "tags": [
@@ -2114,6 +2177,37 @@
         "title": "Band",
         "description": "Mastery bands (spec \u00a74.9). Stored in concept_progress.band; set by pedagogy.band()."
       },
+      "BandCounts": {
+        "properties": {
+          "not_started": {
+            "type": "integer",
+            "title": "Not Started",
+            "default": 0
+          },
+          "shaky": {
+            "type": "integer",
+            "title": "Shaky",
+            "default": 0
+          },
+          "learning": {
+            "type": "integer",
+            "title": "Learning",
+            "default": 0
+          },
+          "solid": {
+            "type": "integer",
+            "title": "Solid",
+            "default": 0
+          },
+          "mastered": {
+            "type": "integer",
+            "title": "Mastered",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "BandCounts"
+      },
       "CacheImpact": {
         "properties": {
           "calls": {
@@ -2651,6 +2745,46 @@
         ],
         "title": "CurrentUser"
       },
+      "DashboardConcept": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "band": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Band"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          },
+          "due": {
+            "type": "boolean",
+            "title": "Due"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "title",
+          "band",
+          "complete",
+          "due"
+        ],
+        "title": "DashboardConcept",
+        "description": "One cell of the course's strip, in plan order."
+      },
       "DashboardCourse": {
         "properties": {
           "enrollment_id": {
@@ -2706,6 +2840,16 @@
             "type": "integer",
             "title": "Due Count"
           },
+          "bands": {
+            "$ref": "#/components/schemas/BandCounts"
+          },
+          "concepts": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardConcept"
+            },
+            "type": "array",
+            "title": "Concepts"
+          },
           "completed_at": {
             "anyOf": [
               {
@@ -2730,6 +2874,8 @@
           "concepts_total",
           "concepts_complete",
           "due_count",
+          "bands",
+          "concepts",
           "completed_at"
         ],
         "title": "DashboardCourse"
@@ -3256,6 +3402,40 @@
           "impact"
         ],
         "title": "OrgCourseImpact"
+      },
+      "OrgCourseSummary": {
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CourseStatus"
+          },
+          "doc_count": {
+            "type": "integer",
+            "title": "Doc Count"
+          },
+          "assigned_count": {
+            "type": "integer",
+            "title": "Assigned Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_id",
+          "title",
+          "status",
+          "doc_count",
+          "assigned_count"
+        ],
+        "title": "OrgCourseSummary",
+        "description": "An org course as its admin sees it in a list: a way back to a template, which has no\nenrollment for the admin and so isn't on their dashboard."
       },
       "OrgDocDetail": {
         "properties": {

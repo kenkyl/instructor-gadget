@@ -382,6 +382,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orgs/{org_slug}/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Org Courses
+         * @description The org's courses, drafts and templates included, with doc and learner counts (admins
+         *     only). The admin's way back to a template, which isn't on their dashboard.
+         */
+        get: operations["org_courses_api_orgs__org_slug__courses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enrollments/{enrollment_id}": {
         parameters: {
             query?: never;
@@ -658,6 +679,34 @@ export interface components {
          * @enum {string}
          */
         Band: "shaky" | "learning" | "solid" | "mastered";
+        /** BandCounts */
+        BandCounts: {
+            /**
+             * Not Started
+             * @default 0
+             */
+            not_started: number;
+            /**
+             * Shaky
+             * @default 0
+             */
+            shaky: number;
+            /**
+             * Learning
+             * @default 0
+             */
+            learning: number;
+            /**
+             * Solid
+             * @default 0
+             */
+            solid: number;
+            /**
+             * Mastered
+             * @default 0
+             */
+            mastered: number;
+        };
         /** CacheImpact */
         CacheImpact: {
             /** Calls */
@@ -895,6 +944,21 @@ export interface components {
             /** Display Name */
             display_name: string;
         };
+        /**
+         * DashboardConcept
+         * @description One cell of the course's strip, in plan order.
+         */
+        DashboardConcept: {
+            /** Concept Id */
+            concept_id: string;
+            /** Title */
+            title: string;
+            band: components["schemas"]["Band"] | null;
+            /** Complete */
+            complete: boolean;
+            /** Due */
+            due: boolean;
+        };
         /** DashboardCourse */
         DashboardCourse: {
             /**
@@ -927,6 +991,9 @@ export interface components {
             concepts_complete: number;
             /** Due Count */
             due_count: number;
+            bands: components["schemas"]["BandCounts"];
+            /** Concepts */
+            concepts: components["schemas"]["DashboardConcept"][];
             /** Completed At */
             completed_at: string | null;
         };
@@ -1159,6 +1226,25 @@ export interface components {
             /** Learners */
             learners: number;
             impact: components["schemas"]["CacheImpact"];
+        };
+        /**
+         * OrgCourseSummary
+         * @description An org course as its admin sees it in a list: a way back to a template, which has no
+         *     enrollment for the admin and so isn't on their dashboard.
+         */
+        OrgCourseSummary: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Title */
+            title: string;
+            status: components["schemas"]["CourseStatus"];
+            /** Doc Count */
+            doc_count: number;
+            /** Assigned Count */
+            assigned_count: number;
         };
         /** OrgDocDetail */
         OrgDocDetail: {
@@ -2255,6 +2341,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrgImpactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    org_courses_api_orgs__org_slug__courses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgCourseSummary"][];
                 };
             };
             /** @description Validation Error */
