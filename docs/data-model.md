@@ -867,6 +867,10 @@ RedisVL `SemanticCache` (ADR-0023). Each entry is a hash at `llmcache_semantic:{
 | Read | Every `semantic`-policy call (today: `teach-concept.teach` for core lessons) after an exact miss. A hit sets `lessons.cache_result = semantic_hit` and `cache_key` = the entry's Redis key; `llm_calls` gets `similarity` (1 − distance) and the saved cost/latency |
 | Write | On a miss, after the output validates (alongside the exact entry) |
 
+### 6.5 Intake guard: `intake_guard` ✅ PC3.3
+
+A RedisVL `SemanticRouter` index on DB 0 (ADR-0024). Each block-route reference phrase is a hash under the `intake_guard` prefix holding its route name and MiniLM vector. The router's config is stored alongside it by RedisVL. Rebuilt (`overwrite=True`) at every startup from `agent/guard.py`, so it holds nothing that can't be rebuilt; no TTL. Read on `POST /api/courses` (topic, goal and expert_means, each checked separately). Never written at runtime.
+
 **Never cached** (results are logged as `bypass` in `llm_calls`):
 - `diagnose`, `grade` and `remediate`, which are learner-specific by definition
 - any request that includes the learner's logged misconceptions (ADR-0007)

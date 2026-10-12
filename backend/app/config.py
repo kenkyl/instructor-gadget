@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # until the PC3.2 eval sweeps it. Off: only the exact tier runs (and no model is loaded).
     semantic_cache_enabled: bool = True
     semantic_cache_distance_threshold: float = 0.15
+    # Intake guard (PC3.3): a semantic router that rejects non-learning course requests.
+    intake_guard_enabled: bool = True
 
 
 @lru_cache

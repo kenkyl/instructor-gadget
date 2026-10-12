@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from agent.llm import LLMError, LLMRefusal
 from app.auth import CurrentUserDep
@@ -36,7 +36,17 @@ OwnedCourseDep = Annotated[Course, Depends(owned_course)]
 
 
 @router.post("", status_code=201)
-async def create(intake: CourseIntake, user: CurrentUserDep, db: Db) -> CourseDetail:
+async def create(
+    intake: CourseIntake, request: Request, user: CurrentUserDep, db: Db
+) -> CourseDetail:
+    # Intake guard (PC3.3): reject crude, off-topic, dangerous or injection requests before
+    # anything is stored or sent to the model. Off (None) when Redis isn't on DB 0.
+    guard = request.app.state.guard
+    if guard is not None:
+        m = intake.mission
+        reason = await guard.blocked(intake.config.topic, m.goal, m.expert_means)
+        if reason is not None:
+            raise HTTPException(422, reason)
     course = await create_course(db, user, intake)
     return await course_detail(db, user, course)
 

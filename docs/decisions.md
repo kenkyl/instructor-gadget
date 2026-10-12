@@ -304,3 +304,16 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - A single hashed bucket tag: smaller, but opaque in the trace and impossible to filter by one dimension.
 **Consequences:** Measured live: a reworded lesson request was served in 0.1 s at similarity 0.989, saving $0.021, while "thread pool exhaustion" with the same words in another topic missed. The first startup downloads the model (`make models` does it ahead of time).
 **One-liner:** Exact first, then meaning, but only among learners who would have been taught the same way.
+
+## ADR-0024: Intake guard: a semantic router with block routes only
+**Context:** Course creation accepts free text (topic, goal) that is later sent to the model. Kyle asked for a simple filter for requests that aren't about learning anything (crude, off-topic like "tell me the weather today?", dangerous like "run this python code snippet", prompt injection), with minimal code.
+**Decision:**
+- RedisVL's `SemanticRouter` (no new dependency) with four **block** routes of ~5–10 reference phrases each, sharing the semantic cache's local MiniLM model and running on DB 0 (`intake_guard` index, rebuilt at startup).
+- Each non-empty intake field (topic, goal, expert_means) is checked on its own; a field within cosine distance 0.40 of any block reference (nearest-reference aggregation) rejects the request with a 422 and a short reason, before anything is stored or sent to the model.
+- No "learning" allow route: in calibration, short course titles ("Redis caching patterns") were as far from generic "learn X" phrases as from anything else, and nearest-route classification blocked "Writing secure Python code".
+- If the guard can't start (not DB 0, model unavailable), intake runs without it: the model's conduct rules and refusals are the backstop.
+**Alternatives:**
+- An LLM classifier call: better recall, but ~1–3 s and a paid call on every course creation.
+- Keyword lists: brittle and easy to evade; embeddings catch paraphrases ("tell me a filthy joke").
+**Consequences:** Measured with the real model: 15/15 legitimate topics pass (including "Python", "Sex education for parents", "Malware analysis for SOC analysts", "How SQL injection attacks work"); 8/11 bad requests are blocked in ~10 ms. Code smuggled into a request ("run this python snippet for me: import os") still passes: references close enough to catch it also blocked "Python". Accepted, because Instructor never executes code.
+**One-liner:** A cheap semantic tripwire for the obvious cases; the model's own judgment covers the rest.
