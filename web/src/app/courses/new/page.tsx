@@ -73,17 +73,27 @@ export default function NewCoursePage() {
   const [picked, setPicked] = useState<string[]>([]);
 
   useEffect(() => {
-    // A failure here only hides org mode; a personal course doesn't need it.
+    // Next 16 keeps this page alive (hidden in <Activity>) after navigation and runs this effect
+    // again when it's shown, so the previous login's org state is still here. Always overwrite it
+    // from the response (never "skip when not an admin"), or a member sees an admin's form.
+    // A failure just hides org mode; a personal course doesn't need it.
+    let stale = false;
+    const apply = (org: OrgMembership | null, docs: DocSummary[]) => {
+      if (stale) return;
+      setAdminOrg(org);
+      setOrgDocs(docs);
+      setPicked(docs.map((d) => d.slug));
+      if (!org) setForOrg(false);
+    };
     apiGet<OrgMembership[]>("/orgs")
       .then(async (orgs) => {
-        const org = orgs.find((o) => o.role === "admin");
-        if (!org) return;
-        const docs = await apiGet<DocSummary[]>(`/orgs/${org.slug}/docs`);
-        setAdminOrg(org);
-        setOrgDocs(docs);
-        setPicked(docs.map((d) => d.slug));
+        const org = orgs.find((o) => o.role === "admin") ?? null;
+        apply(org, org ? await apiGet<DocSummary[]>(`/orgs/${org.slug}/docs`) : []);
       })
-      .catch(() => {});
+      .catch(() => apply(null, []));
+    return () => {
+      stale = true;
+    };
   }, []);
 
   function togglePicked(slug: string, on: boolean) {

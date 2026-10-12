@@ -23,7 +23,7 @@ export function Dashboard() {
 
   useEffect(() => {
     // Only decides whether to show the "Org docs" link, so a failure just hides it.
-    apiGet<OrgMembership[]>("/orgs").then(setOrgs, () => {});
+    apiGet<OrgMembership[]>("/orgs").then(setOrgs, () => setOrgs([]));
   }, []);
 
   useEffect(() => {
