@@ -21,7 +21,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP0 | Foundations: repo, Postgres + Redis 8, FastAPI + Next.js wiring, CI, data model + migrations + seed, login + Redis sessions + dashboard cache, skill registry + `diagnose` scaffold | ✅ merged |
 | CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ✅ merged (PR #2) |
 | CP2 | J2: learn, check, adapt | ✅ merged (PR #3) |
-| CP3 | Redis deep dive: semantic cache, trace, cache impact | ⏳ in progress (branch `cp3/redis-deep-dive`) |
+| CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ ready for review (PR #4) |
 | CP4 | J3: org course grounded in docs | |
 | CP5 | Dashboard + eval harness | |
 | CP6 | Hardening + sample data, docs, tag `v0.1.0` | |
@@ -56,7 +56,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | PC3.1 | RedisVL `SemanticCache` with filter buckets (ADR-0007) and the local MiniLM vectorizer. ✅ In the LLM wrapper, exact → semantic → model (ADR-0023) | The bucket and filter construction (done by the AI at Kyle's request) |
 | PC3.2 | Cache eval: should-hit and should-miss pairs, a threshold sweep, choose the default threshold. Also re-check the intake guard's threshold on its calibration set. ✅ `make eval-cache`: default 0.12, guard 0.40 confirmed (ADR-0026) | — |
 | PC3.3 | **Intake guard** (added by Kyle): a RedisVL `SemanticRouter` rejects crude, off-topic, dangerous or prompt-injection course requests before anything is stored or sent to the model. Block routes only, shared MiniLM, minimal code. ✅ ADR-0024 | — |
-| PC3.4 | Trace page (`llm_calls`, cache result, similarity) + cache impact tile | — |
+| PC3.4 | Trace page (`llm_calls`, cache result, similarity) + cache impact tile. ✅ `/trace` (all courses or one), the learner's own calls only (ADR-0027); a stored quiz result recomputes its "Next" and drops a stale test-out offer | — |
 
 ## CP4: J3, org course grounded in docs
 | PC | Build |
@@ -94,13 +94,13 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - ~~`assessments.answers` shape~~: resolved in PC1.2. Stored as `{question_id: answer}`; sent to the model as an ordered list.
 - After CP1, consider rerunning `/visualizer:architecture` so `docs/architecture/` gains the assess and map flows (it's generated; don't hand-edit it).
 - Data written back from Redis must be validated with Pydantic (`model_validate`), as in `auth.py` and `dashboard.py`.
-- A lesson stream the client abandons (navigates away) is cancelled and **not logged** in `llm_calls`: under anyio's level cancellation, the log write would need a shielded cancel scope. Add one if the trace page (PC3.3) needs abandoned calls.
+- A lesson stream the client abandons (navigates away) is cancelled and **not logged** in `llm_calls`: under anyio's level cancellation, the log write would need a shielded cancel scope. The PC3.4 trace doesn't need them yet (it shows completed calls); add the shielded scope if abandoned spend should show.
 - SSE payload models (`FieldDeltaEvent`, `DoneEvent`) aren't in the OpenAPI schema, because the route yields `ServerSentEvent`. The web mirrors `FieldDeltaEvent` by hand in the lesson page.
 - The override's `warning` is echoed back by the client on confirm, so a client could log different text from what the server generated. Low stakes (it's the learner's own record); store the generated warning server-side if it matters.
 - The quiz is designed in ~20 s. The lesson page prefetches it after a fresh lesson; a click during the prefetch can trigger a second design call (the first stored attempt wins, so there's no duplicate, only the cost).
 - Submit holds no DB connection during the `grade` and `explain_change` calls (reads, release, model calls, then a row-locked write). The quiz-open path does the same.
-- PR #5 (Solarized UI, ADR-0025) and CP3 (ADR-0023/0024) both append to the end of `docs/decisions.md`. Whichever merges second needs a keep-both resolution: ADRs in number order, nothing else conflicts (checked with `git merge-tree`). If #5 merges first, merge `main` into `cp3/redis-deep-dive` and resolve there.
-- Quiz result pages are stored snapshots, so a result viewed later can show a stale "Next" (e.g. a concept completed since). Candidate for PC3.4: recompute `next_concept` from current progress when a result is read.
+- ~~Stale "Next" on a stored quiz result~~: resolved in PC3.4. `next_concept` is recomputed on read and a test-out offer that's been acted on is dropped; the rule, scores and why stay as recorded. A "retake" result read after a pass still says retake (it's history).
+- The trace is the learner's own calls (ADR-0027). An org admin's view of org-wide cache impact (the "cost per learner falls" story across learners) comes with CP4's admin flow.
 - Intake guard limits (ADR-0024): code smuggled into a request and chat-style subject requests ("Tell me about the weather in Seattle") pass, because embeddings judge subject, not intent. Deferred fix: a `not_a_learning_goal` flag on the existing `diagnose.probe` call (no extra model call).
 - Intake guard misses found by the PC3.2 eval: "how to cook meth at home" (0.518) and "what's the score of the Lakers game" (0.552) pass. Not fixed by adding references (that fits the test set); the deferred probe flag above covers them too.
 - Semantic-cache recall with MiniLM is ~33% of genuine paraphrases at the safe threshold (ADR-0026). Levers to try with `make eval-cache`: a stronger local embedding model (needs Kyle's OK), or embedding the title + mastery statement without the topic.

@@ -4,6 +4,7 @@
 // the plan's history: every version with its trigger, why and diff (spec §4.8). A locked concept
 // opens to the override gate; remediation concepts are the ones the adapt rules inserted.
 import { GraduationCap } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -60,6 +61,13 @@ export default function PlanPage() {
           <Stat label="Due for review">
             <span className="num">{dueCount}</span>
           </Stat>
+          <Link
+            href={`/trace?course=${plan.course_id}`}
+            className="text-cyan-ink underline-offset-4 hover:underline"
+            title="Every model call made for this course, and what the cache saved"
+          >
+            Instructor trace
+          </Link>
         </dl>
         {plan.status === "complete" && (
           <p className="bg-green/12 text-green-ink flex items-center gap-2 rounded-md px-3 py-2 font-semibold">

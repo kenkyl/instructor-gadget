@@ -17,7 +17,7 @@ from agent.llm import LLMClient
 from agent.registry import get_registry
 from agent.semantic import MODEL as SEMANTIC_MODEL
 from agent.semantic import SemanticTier
-from app.api import auth, courses, dashboard, health, learning, skills
+from app.api import auth, courses, dashboard, health, learning, skills, trace
 from app.config import Settings, get_settings
 from app.services.llm_log import DbCallSink
 
@@ -106,3 +106,4 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(skills.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
 app.include_router(learning.router, prefix="/api")
+app.include_router(trace.router, prefix="/api")

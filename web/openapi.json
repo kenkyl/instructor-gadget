@@ -1402,6 +1402,73 @@
           }
         }
       }
+    },
+    "/api/trace": {
+      "get": {
+        "tags": [
+          "trace"
+        ],
+        "summary": "Trace",
+        "description": "The caller's own LLM calls and cache impact, optionally for one course.",
+        "operationId": "trace_api_trace_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1501,6 +1568,66 @@
         "title": "Band",
         "description": "Mastery bands (spec \u00a74.9). Stored in concept_progress.band; set by pedagogy.band()."
       },
+      "CacheImpact": {
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "model_calls": {
+            "type": "integer",
+            "title": "Model Calls"
+          },
+          "lookups": {
+            "type": "integer",
+            "title": "Lookups"
+          },
+          "exact_hits": {
+            "type": "integer",
+            "title": "Exact Hits"
+          },
+          "semantic_hits": {
+            "type": "integer",
+            "title": "Semantic Hits"
+          },
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "spent_usd": {
+            "type": "number",
+            "title": "Spent Usd"
+          },
+          "saved_usd": {
+            "type": "number",
+            "title": "Saved Usd"
+          },
+          "saved_seconds": {
+            "type": "number",
+            "title": "Saved Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "calls",
+          "model_calls",
+          "lookups",
+          "exact_hits",
+          "semantic_hits",
+          "hit_rate",
+          "spent_usd",
+          "saved_usd",
+          "saved_seconds"
+        ],
+        "title": "CacheImpact"
+      },
       "CacheResult": {
         "type": "string",
         "enum": [
@@ -1543,6 +1670,14 @@
           "prompt_version"
         ],
         "title": "CallInfo"
+      },
+      "CallStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "error"
+        ],
+        "title": "CallStatus"
       },
       "Citation": {
         "properties": {
@@ -3164,6 +3299,227 @@
           "answers"
         ],
         "title": "SubmitRequest"
+      },
+      "TraceCall": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "course_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
+          "course_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Title"
+          },
+          "skill": {
+            "type": "string",
+            "title": "Skill"
+          },
+          "call": {
+            "type": "string",
+            "title": "Call"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "cache_result": {
+            "$ref": "#/components/schemas/CacheResult"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms"
+          },
+          "est_cost_usd": {
+            "type": "number",
+            "title": "Est Cost Usd"
+          },
+          "saved_cost_usd": {
+            "type": "number",
+            "title": "Saved Cost Usd"
+          },
+          "saved_latency_ms": {
+            "type": "integer",
+            "title": "Saved Latency Ms"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CallStatus"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "prompt_excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Excerpt"
+          },
+          "response_excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "course_id",
+          "course_title",
+          "skill",
+          "call",
+          "model",
+          "prompt_version",
+          "cache_result",
+          "similarity",
+          "input_tokens",
+          "output_tokens",
+          "latency_ms",
+          "est_cost_usd",
+          "saved_cost_usd",
+          "saved_latency_ms",
+          "status",
+          "error",
+          "prompt_excerpt",
+          "response_excerpt"
+        ],
+        "title": "TraceCall"
+      },
+      "TraceCourse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "calls"
+        ],
+        "title": "TraceCourse"
+      },
+      "TraceResponse": {
+        "properties": {
+          "impact": {
+            "$ref": "#/components/schemas/CacheImpact"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/TraceCall"
+            },
+            "type": "array",
+            "title": "Calls"
+          },
+          "courses": {
+            "items": {
+              "$ref": "#/components/schemas/TraceCourse"
+            },
+            "type": "array",
+            "title": "Courses"
+          },
+          "course_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "impact",
+          "calls",
+          "courses",
+          "course_id",
+          "truncated"
+        ],
+        "title": "TraceResponse"
       },
       "ValidationError": {
         "properties": {

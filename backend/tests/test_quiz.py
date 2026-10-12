@@ -274,3 +274,37 @@ def test_remediation_of_an_overridden_concept_is_open(client, fake_llm: FakeAnth
     }
     assert status[remedy] == "unlocked" and status["ttls"] == "in_progress"
     assert result["next_concept"]["concept_id"] == "cache-aside"  # earlier in sequence, open
+
+
+def test_a_result_read_later_points_at_the_current_next_step(
+    client, fake_llm: FakeAnthropic
+) -> None:
+    """Stored results are snapshots, but "Next" and the test-out offer are about now (PC3.4)."""
+    eid = _learned(client, fake_llm)
+    fake_llm.reply(message(QUIZ))
+    first = _quiz(client, eid).json()["attempt_id"]
+    fake_llm.reply(message(grade(2)), message(EXPLAIN))
+    remedy = _submit(client, eid, first, WRONG).json()["next_concept"]["concept_id"]
+
+    fake_llm.reply(message(GOOD_LESSON))
+    _open(client, eid, remedy)
+    fake_llm.reply(message(TARGETED))
+    second = _quiz(client, eid, remedy).json()["attempt_id"]
+    fake_llm.reply(message(grade(3)))
+    _submit(client, eid, second, RIGHT)
+
+    then = client.get(f"/api/enrollments/{eid}/quiz-attempts/{first}").json()
+    assert then["score"] == 1 and then["rule"] == "insert_remediation"  # the record is unchanged
+    assert then["next_concept"]["concept_id"] == "cache-aside"  # the remedy is done: back to it
+
+
+def test_an_accepted_test_out_offer_is_not_offered_again(client, fake_llm: FakeAnthropic) -> None:
+    eid = _learned(client, fake_llm)
+    fake_llm.reply(message(QUIZ))
+    attempt = _quiz(client, eid).json()["attempt_id"]
+    fake_llm.reply(message(grade(4, transfer=True)))
+    assert _submit(client, eid, attempt, RIGHT).json()["test_out_offer"]["concept_id"] == "ttls"
+
+    client.post(f"/api/enrollments/{eid}/concepts/ttls/test-out")
+    later = client.get(f"/api/enrollments/{eid}/quiz-attempts/{attempt}").json()
+    assert later["test_out_offer"] is None and later["next_concept"]["concept_id"] == "ttls"

@@ -697,7 +697,7 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | Operation | When | How |
 |---|---|---|
 | Write | Every API request through the LLM client wrapper (✔︎ PC1.1), and every cache lookup result (🔜 CP2/CP3) | Insert-only, **one row per API request**: a call that is retried after a validation error writes two rows. Written in its own transaction (`DbCallSink`), so the row survives a failed request. Never-cached skills log `cache_result=bypass` |
-| Read | Instructor trace page and cache impact tile (🔜 PC3.3): hit rate, calls avoided, $ and seconds saved | By course, by time window |
+| Read | Instructor trace page and cache impact tile (✅ PC3.4, `GET /api/trace?course_id=`): the newest 200 rows, plus one aggregate over all matching rows: lookups (miss + hits; bypass never looks), hit rate, calls avoided, $ spent and saved, seconds saved (original generation time − the hit's own latency) | **Only the caller's own rows** (`user_id`), optionally one course (ADR-0027) |
 
 | skill / call | cache_result | similarity | tokens in/out | latency | cost | saved |
 |---|---|---|---|---|---|---|
