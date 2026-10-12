@@ -79,13 +79,23 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | PC6.3 | Full run-through from `make reset`, then tag `v0.1.0` |
 
 ## P1+ (only after CP6, in order)
-1. Live LLM-generated prototypes (sandboxed)
-2. Thin MCP surface: learn from Claude Code (`next_concept`, `get_lesson`, `submit_quiz`)
-3. Instructor chat (thin)
-4. Concept reordering in the map editor
-5. Per-learner diagnostic probe for org courses
-6. Dockerfiles for `web`/`api` + `docker compose --profile full`
-7. Cloud deploy
+1. **Outside knowledge in org courses** (designed, not built; see below)
+2. Live LLM-generated prototypes (sandboxed)
+3. Thin MCP surface: learn from Claude Code (`next_concept`, `get_lesson`, `submit_quiz`)
+4. Instructor chat (thin)
+5. Concept reordering in the map editor
+6. Per-learner diagnostic probe for org courses
+7. Dockerfiles for `web`/`api` + `docker compose --profile full`
+8. Cloud deploy
+
+### P1+ 1: outside knowledge in org courses
+**Why:** today an org course is the docs and nothing else (ADR-0029: the map's concepts come only from the docs, and lessons allow general knowledge only as background or as an optional note on a gap). A good instructor would also add best practice and supplementary context. **Principle:** docs stay authoritative and cited; general knowledge is added in its own structured place and always labelled, so it can't be mistaken for the org's practice.
+- **Lessons:** `LessonOutput.general_notes: list[{kind: background | best_practice | differs_from_docs, topic, note_md}]`, default `[]` (stored lessons still load; personal courses keep it empty). Validator: no `[n]` markers inside a note; a `differs_from_docs` note requires the lesson to cite the doc's side ("Acme does X; common practice is Y"). Rules in `ground-in-sources/SKILL.md`: the org's practice first, then up to ~3 notes, hedged and non-numeric, never invented org detail.
+- **Map:** `Concept.basis: docs | general` (default `docs`). The template map may add concepts the docs assume or the goal's best practice requires, marked `general`. **Code enforces the cap** (≤30% of the map, at most 3 of 12), and the admin can already remove any concept.
+- **Cite rules:** a lesson or quiz for a `general` concept needs no citation or gap (it still cites any doc that touches it).
+- **Web:** a "Beyond your docs" section in the lesson, labelled "General knowledge, not from your docs"; a "General knowledge" badge on the template map.
+- **Eval and docs:** three `make eval-grounding` cases (best-practice note on a covered concept; a general-basis concept; a doc-vs-practice conflict where the docs win), validator and cap tests, ADR-0031 amending ADR-0029, `data-model.md` for the two JSONB shape changes, `make types`. About one PC; ~$0.20 live.
+- **Not part of it:** live web search for supplementary facts. It adds cost, latency and a new capability, and compatibility with structured outputs is unverified. Evaluate separately, with Kyle's OK.
 
 ## Known follow-ups
 - ~~`StarletteDeprecationWarning`~~: resolved in PC1.1. The Anthropic SDK 1.x depends on `httpx2`, and Starlette's test client picks it up automatically.
@@ -110,4 +120,5 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - ~~PC4.3: the admin's template map needs `course_grounding` too~~: resolved in PC4.3. `grade` and `remediate.explain_change` aren't grounded (the rubric and the lesson already are).
 - The template map isn't checked against the docs by code: nothing proves each concept is covered. A concept → docs mapping (and a coverage view for admins) would make it checkable (ADR-0030); until then it's the CP5 grounding judge's job.
 - An admin can't edit an accepted template or un-assign a learner. Both are small changes on top of ADR-0004 if wanted (a new course is the workaround today, since docs are immutable).
+- Org courses are docs-only by design today (ADR-0029). Adding outside knowledge (best practices, supplementary concepts, always labelled and docs-win) is designed under P1+ 1.
 - The org docs page and the org-course form use the caller's first org membership (Phase 1 has one org per user). A multi-org picker comes with real multi-tenancy.

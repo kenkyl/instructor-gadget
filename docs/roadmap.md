@@ -72,6 +72,8 @@ Phase tags: **[P1]** MVP · **[P1+]** only if time allows after CP6 · **[P2]** 
 |---|---|
 | Any topic, technical or non-technical (Phase 1 sample content is technical) | P1 (no topic restrictions) |
 | Org custom context: internal documentation, processes, playbooks | P1 (context stuffing of small docs) → P2 (RAG with Redis vector search for large doc sets) |
+| **Outside knowledge in org courses:** best practices, supplementary context and a few general-basis concepts alongside the docs, always labelled and never overriding them *(added after CP4; designed in `docs/build-plan.md` P1+ 1)* | P1+ |
+| Web-search-backed supplementary facts for org courses *(needs a cost/latency decision and a structured-output compatibility check)* | Explore |
 | Additional context sources: Google Drive, GitHub repos, wikis *(suggested; candidates for Arcade-delegated access)* | Explore |
 | Use-case templates: certification/test prep, technical onboarding, GTM new-hire training, interview prep, meeting prep, learning about a customer, learning a new domain | P2 |
 
