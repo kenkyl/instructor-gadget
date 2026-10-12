@@ -12,8 +12,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { BackLink, Page, PageMessage } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,9 +58,7 @@ export default function CoursePage() {
     void post("assess", "Assessing your answers…", { answers: all });
   }
 
-  if (!course) {
-    return <p className="p-10 text-muted-foreground">{error ?? "Loading…"}</p>;
-  }
+  if (!course) return <PageMessage error={error}>Loading your course…</PageMessage>;
 
   const questions = course.questions ?? [];
   const assessment = course.assessment ?? null;
@@ -67,16 +66,26 @@ export default function CoursePage() {
   const { config, mission } = course;
 
   return (
-    <main className="mx-auto max-w-2xl p-10 space-y-6">
-      <header className="space-y-1">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{course.title}</h1>
-          <Badge variant="outline">{course.status}</Badge>
-        </div>
-        <p className="text-muted-foreground text-sm">
-          {config.target_hours} h · {mission.mode} · target {config.target_level} · you said{" "}
-          {config.self_level}
-        </p>
+    <Page className="space-y-8">
+      <header className="space-y-3">
+        <BackLink href="/">Courses</BackLink>
+        <h1>{course.title}</h1>
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+          {(
+            [
+              ["Time", `${config.target_hours} h`],
+              ["Mode", mission.mode],
+              ["Target", config.target_level],
+              ["You said", config.self_level],
+              ["Stage", course.status],
+            ] as const
+          ).map(([k, v]) => (
+            <div key={k} className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">{k}</dt>
+              <dd className="text-strong first-letter:uppercase">{v}</dd>
+            </div>
+          ))}
+        </dl>
       </header>
 
       {questions.length === 0 ? (
@@ -125,9 +134,9 @@ export default function CoursePage() {
 
           <form onSubmit={submitAnswers} className="space-y-4">
             {!assessment && (
-              <div>
-                <h2 className="text-lg font-medium">Where are you really?</h2>
-                <p className="text-muted-foreground text-sm">
+              <div className="space-y-1">
+                <h2>Where are you really?</h2>
+                <p className="text-muted-foreground max-w-[68ch]">
                   You said {config.self_level}. Answer in a few sentences each; your answers, not
                   the label, decide where the course starts. A blank answer counts as “I don’t
                   know”, which is fine.
@@ -139,8 +148,8 @@ export default function CoursePage() {
               return (
                 <Card key={q.id}>
                   <CardHeader>
-                    <CardTitle className="text-base font-normal">
-                      <span className="text-muted-foreground mr-2">{i + 1}.</span>
+                    <CardTitle className="flex gap-3 font-medium">
+                      <span className="num text-muted-foreground">{i + 1}</span>
                       {q.prompt}
                     </CardTitle>
                   </CardHeader>
@@ -149,7 +158,7 @@ export default function CoursePage() {
                       Your answer to question {i + 1}
                     </Label>
                     {assessment ? (
-                      <p className="text-sm whitespace-pre-wrap border-l-2 pl-3">
+                      <p className="border-rail border-l-2 pl-3 whitespace-pre-wrap">
                         {course.answers?.[q.id] || (
                           <span className="text-muted-foreground">(no answer)</span>
                         )}
@@ -165,8 +174,8 @@ export default function CoursePage() {
                     )}
                     {evidence && (
                       <p className="text-sm">
-                        <Badge variant="secondary" className="mr-2">
-                          points to {evidence.points_to}
+                        <Badge variant="blue" className="mr-2">
+                          Points to {evidence.points_to}
                         </Badge>
                         {evidence.observation}
                       </p>
@@ -186,30 +195,33 @@ export default function CoursePage() {
           </form>
         </>
       )}
-    </main>
+    </Page>
   );
 }
 
 function AssessmentCard({ assessment: a }: { assessment: Assessment }) {
   const adjusted = a.assessed_level !== a.claimed_level;
   return (
-    <Card className={adjusted ? "border-amber-500" : undefined}>
+    <Card className={adjusted ? "border-l-yellow border-l-2" : "border-l-green border-l-2"}>
       <CardHeader>
         <CardTitle>
           We’ll start at <span className="capitalize">{a.assessed_level}</span>
         </CardTitle>
-        <CardDescription>
-          You said {a.claimed_level} · confidence {Math.round(a.confidence * 100)}%
+        <CardDescription className="flex flex-wrap gap-x-5">
+          <span>You said {a.claimed_level}</span>
+          <span>
+            Confidence <span className="num text-foreground">{Math.round(a.confidence * 100)}%</span>
+          </span>
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="max-w-[68ch] space-y-3">
         {/* The instructor's own words: what changed, which answer drove it, and why. */}
         {adjusted && a.adjustment_message && <p>{a.adjustment_message}</p>}
         {!adjusted && <p>Your answers match the level you gave.</p>}
         {a.gaps.length > 0 && (
           <div>
-            <p className="font-medium">Gaps the course will cover first</p>
-            <ul className="list-disc pl-5">
+            <p className="text-strong font-semibold">Gaps the course will cover first</p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
               {a.gaps.map((g) => (
                 <li key={g}>{g}</li>
               ))}
@@ -256,23 +268,31 @@ function ConceptMapCard({
     <Card>
       <CardHeader>
         <CardTitle>Your concept map</CardTitle>
-        <CardDescription>
-          {map.concepts.length} concepts · {total} min (target {targetMinutes})
+        <CardDescription className="flex flex-wrap gap-x-5">
+          <span>
+            <span className="num text-foreground">{map.concepts.length}</span> concepts
+          </span>
+          <span>
+            <span className="num text-foreground">{total}</span> min of a{" "}
+            <span className="num text-foreground">{targetMinutes}</span> min target
+          </span>
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p>{map.sequence_rationale}</p>
+      <CardContent className="space-y-5">
+        <p className="max-w-[68ch]">{map.sequence_rationale}</p>
         <ol className="space-y-3">
           {map.sequence.map((cid, i) => {
             const c = byId.get(cid);
             if (!c) return null;
             const deps = dependentsOf(cid);
             return (
-              <li key={cid} className="border-l-2 pl-3 space-y-1">
+              <li key={cid} className="border-rail space-y-1 border-l-2 pl-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-muted-foreground">{i + 1}.</span>
-                  <span className="font-medium">{c.title}</span>
-                  <Badge variant="outline">{c.est_minutes} min</Badge>
+                  <span className="num text-muted-foreground">{i + 1}</span>
+                  <span className="text-strong font-semibold">{c.title}</span>
+                  <Badge variant="outline" className="num">
+                    {c.est_minutes} min
+                  </Badge>
                   <Badge variant="secondary">{c.concept_type}</Badge>
                   <Badge variant="secondary">{c.objective_level}</Badge>
                   {editable && map.concepts.length > 1 && confirming !== cid && (
@@ -287,14 +307,14 @@ function ConceptMapCard({
                     </Button>
                   )}
                 </div>
-                <p>{c.mastery_statement}</p>
+                <p className="text-muted-foreground max-w-[68ch] text-sm">{c.mastery_statement}</p>
                 {c.prereqs.length > 0 && (
                   <p className="text-muted-foreground text-xs">
                     Needs: {c.prereqs.map((p) => byId.get(p)?.title ?? p).join(", ")}
                   </p>
                 )}
                 {confirming === cid && (
-                  <div className="rounded-md border border-amber-500 p-3 space-y-2">
+                  <div className="border-yellow bg-yellow/10 space-y-3 rounded-r-md border-l-2 p-3 text-sm">
                     <p>
                       {deps.map((d) => d.title).join(", ")} {deps.length === 1 ? "builds" : "build"}{" "}
                       on {c.title}. If you remove it, the course won’t teach it, and{" "}
@@ -322,14 +342,20 @@ function ConceptMapCard({
             {error && <span className="text-destructive text-sm">{error}</span>}
           </div>
         ) : (
-          <p className="text-muted-foreground">
-            Accepted. It’s on your <Link href="/" className="underline">dashboard</Link>.{" "}
+          <div className="flex flex-wrap items-center gap-4">
             {enrollmentId && (
-              <Link href={`/learn/${enrollmentId}`} className="text-foreground font-medium underline">
-                Start learning →
+              <Link href={`/learn/${enrollmentId}`} className={buttonVariants()}>
+                Start learning
               </Link>
             )}
-          </p>
+            <p className="text-muted-foreground">
+              Accepted. It’s on your{" "}
+              <Link href="/" className="text-blue-ink underline underline-offset-4">
+                courses
+              </Link>{" "}
+              page.
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>

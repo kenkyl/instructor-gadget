@@ -22,6 +22,7 @@ Instructor stores every piece of data it uses in one of three places. This doc c
 | **Postgres 16** | Source of truth | Durable (Docker volume `pgdata`; Alembic-migrated) | Identity, courses, enrollments, plans, learner progress, lessons, quizzes, org docs, the LLM call log |
 | **JSONB columns** (inside Postgres) | Documents whose shape is still evolving | Durable (same as Postgres) | Course config, mission, concept maps, quiz questions, FSRS cards. Each is validated by a Pydantic model at the service boundary |
 | **Redis 8** | Speed and cost layer | Disposable: everything can be rebuilt from Postgres or regenerated | Sessions, the dashboard cache, the exact-match LLM cache, the semantic LLM cache (vector index) |
+| **Browser** | Session handle and display preference | Per browser; clearing site data loses only the theme choice | The `sid` cookie (§6.1) and `localStorage["instructor-theme"]` (`"light"` or `"dark"`, written only when the learner uses the theme toggle; absent means follow the OS setting). No learning data is stored in the browser |
 
 **Design rules:**
 1. **Postgres is the only source of truth.** Losing Redis costs a re-login and a cold cache, never data.
