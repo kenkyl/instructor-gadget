@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agent.llm import CallContext, Done, LLMClient, Restart, TextDelta
 from agent.partial import FieldDeltas
+from agent.semantic import SemanticKey
 from agent.types import (
     Band,
     ConceptMap,
@@ -111,6 +112,7 @@ class LessonJob:
     # core: teach-concept.teach (shareable, cached); remediation: remediate.lesson (never cached)
     payload: TeachInput | RemediationLessonInput
     prototype_id: uuid.UUID | None
+    semantic: SemanticKey | None = None  # core lessons only; remediation is never cached
 
 
 async def get_owned_enrollment(
@@ -256,6 +258,11 @@ async def prepare_lesson(
             prereq_titles=[concepts[p].title for p in concept.prereqs if p in concepts],
         )
         kind = LessonKind.core
+    semantic = (
+        semantic_key(payload, course.org_id, course.doc_set_hash)
+        if isinstance(payload, TeachInput)
+        else None
+    )
     return LessonJob(
         user_id=user.id,
         course_id=course.id,
@@ -265,6 +272,27 @@ async def prepare_lesson(
         kind=kind,
         payload=payload,
         prototype_id=await prototype_for(db, concept, config.formats),
+        semantic=semantic,
+    )
+
+
+def semantic_key(
+    payload: TeachInput, org_id: uuid.UUID | None, doc_set_hash: str | None
+) -> SemanticKey:
+    """The lesson's semantic-cache key (ADR-0007, data-model §6.4).
+
+    Embedded: the topic, then the concept's title and mastery statement. The topic is there
+    because a concept title alone is ambiguous across courses ("Pool exhaustion" in a database
+    course vs a thread-pool course). Everything that must match exactly goes in the bucket.
+    """
+    c = payload.concept
+    return SemanticKey(
+        text=f"{payload.topic}\n{c.title}\n{c.mastery_statement}",
+        org_id=str(org_id) if org_id else None,
+        target_level=payload.target_level,
+        formats=payload.formats,
+        analogy_domain=payload.analogy_domain,
+        doc_set_hash=doc_set_hash,
     )
 
 
@@ -278,7 +306,9 @@ async def stream_lesson(
     deltas = FieldDeltas(STREAMED_FIELDS)
     ctx = CallContext(user_id=job.user_id, course_id=job.course_id, enrollment_id=job.enrollment_id)
     if isinstance(job.payload, TeachInput):
-        events = llm.stream("teach-concept", "teach", job.payload, LessonOutput, ctx=ctx)
+        events = llm.stream(
+            "teach-concept", "teach", job.payload, LessonOutput, ctx=ctx, semantic=job.semantic
+        )
     else:
         events = llm.stream("remediate", "lesson", job.payload, LessonOutput, ctx=ctx)
     async for event in events:

@@ -102,6 +102,11 @@ export default function NewCoursePage() {
     } catch {
       // The course is saved; its page shows the error state and a retry button.
     }
+    // Next 16 keeps this page alive (hidden in <Activity>) after we navigate, and Back restores
+    // its state. Reset before leaving, or Back shows a stuck "Writing…" button and the old draft.
+    setBusy(null);
+    setTopic("");
+    setGoal("");
     router.push(`/courses/${course.id}`);
   }
 

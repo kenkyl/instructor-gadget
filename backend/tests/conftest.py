@@ -65,7 +65,13 @@ async def _seed() -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def test_stores(test_database: None) -> None:
-    redis.Redis.from_url(TEST_REDIS_URL).flushdb()
+    # Delete DB 15's keys one by one, never FLUSHDB: on Redis 8, FLUSHDB on *any* DB drops every
+    # search index, including the dev server's on DB 0 (idx:llm_exact, idx:llm_semantic,
+    # idx:intake_guard), so `make test` would silently break a running `make dev`.
+    r = redis.Redis.from_url(TEST_REDIS_URL)
+    keys = list(r.scan_iter(count=1000))
+    if keys:
+        r.unlink(*keys)
     asyncio.run(_seed())
 
 

@@ -426,6 +426,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trace
+         * @description The caller's own LLM calls and cache impact, optionally for one course.
+         */
+        get: operations["trace_api_trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -470,6 +490,27 @@ export interface components {
          * @enum {string}
          */
         Band: "shaky" | "learning" | "solid" | "mastered";
+        /** CacheImpact */
+        CacheImpact: {
+            /** Calls */
+            calls: number;
+            /** Model Calls */
+            model_calls: number;
+            /** Lookups */
+            lookups: number;
+            /** Exact Hits */
+            exact_hits: number;
+            /** Semantic Hits */
+            semantic_hits: number;
+            /** Hit Rate */
+            hit_rate: number | null;
+            /** Spent Usd */
+            spent_usd: number;
+            /** Saved Usd */
+            saved_usd: number;
+            /** Saved Seconds */
+            saved_seconds: number;
+        };
         /**
          * CacheResult
          * @enum {string}
@@ -489,6 +530,11 @@ export interface components {
             /** Prompt Version */
             prompt_version: string;
         };
+        /**
+         * CallStatus
+         * @enum {string}
+         */
+        CallStatus: "ok" | "error";
         /** Citation */
         Citation: {
             /** Doc */
@@ -1126,6 +1172,77 @@ export interface components {
             answers: {
                 [key: string]: string;
             };
+        };
+        /** TraceCall */
+        TraceCall: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Course Id */
+            course_id: string | null;
+            /** Course Title */
+            course_title: string | null;
+            /** Skill */
+            skill: string;
+            /** Call */
+            call: string;
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            cache_result: components["schemas"]["CacheResult"];
+            /** Similarity */
+            similarity: number | null;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Est Cost Usd */
+            est_cost_usd: number;
+            /** Saved Cost Usd */
+            saved_cost_usd: number;
+            /** Saved Latency Ms */
+            saved_latency_ms: number;
+            status: components["schemas"]["CallStatus"];
+            /** Error */
+            error: string | null;
+            /** Prompt Excerpt */
+            prompt_excerpt: string | null;
+            /** Response Excerpt */
+            response_excerpt: string | null;
+        };
+        /** TraceCourse */
+        TraceCourse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Calls */
+            calls: number;
+        };
+        /** TraceResponse */
+        TraceResponse: {
+            impact: components["schemas"]["CacheImpact"];
+            /** Calls */
+            calls: components["schemas"]["TraceCall"][];
+            /** Courses */
+            courses: components["schemas"]["TraceCourse"][];
+            /** Course Id */
+            course_id: string | null;
+            /** Truncated */
+            truncated: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -1904,6 +2021,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanVersionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_api_trace_get: {
+        parameters: {
+            query?: {
+                course_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceResponse"];
                 };
             };
             /** @description Validation Error */

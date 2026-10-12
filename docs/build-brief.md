@@ -219,7 +219,7 @@ Intake defaults can be static in P1; a `suggest-defaults` call is optional.
    - ~6 **should-hit** pairs (paraphrases, e.g. "Intro to Kubernetes pods" / "Kubernetes pod basics")
    - ~6 **should-miss near-misses** (e.g. "liveness probes" / "readiness probes", "connection pool exhaustion" / "thread pool exhaustion", same topic at a different level)
 
-   Report the hit rate and **false-hit rate** at 3 distance thresholds, and pick the default threshold from the results. It's the same correctness-vs-cost tradeoff as an AI agent deciding when it's confident enough to answer.
+   Report the hit rate and **false-hit rate** at 3 distance thresholds, and pick the default threshold from the results (done early, in PC3.2: `make eval-cache`, ADR-0026; CP5's `make evals` includes it). It's the same correctness-vs-cost tradeoff as an AI agent deciding when it's confident enough to answer.
 
 ## 7. Seed and sample data
 

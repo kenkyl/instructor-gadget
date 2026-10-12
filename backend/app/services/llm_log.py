@@ -28,6 +28,7 @@ class DbCallSink:
                     cache_key=rec.cache_key,
                     saved_cost_usd=rec.saved_cost_usd,
                     saved_latency_ms=rec.saved_latency_ms,
+                    similarity=rec.similarity,
                     input_tokens=rec.input_tokens,
                     output_tokens=rec.output_tokens,
                     latency_ms=rec.latency_ms,

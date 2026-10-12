@@ -47,6 +47,9 @@ export function Dashboard() {
             <span className="bg-cyan size-1.5 rounded-full" />
             {data.served_from === "cache" ? "Served from Redis cache" : "Rebuilt from Postgres"}
           </span>
+          <Link href="/trace" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            Trace
+          </Link>
           <span className="text-muted-foreground hidden text-sm sm:inline">{data.user.display_name}</span>
           <Button variant="ghost" size="sm" onClick={logout}>
             Log out

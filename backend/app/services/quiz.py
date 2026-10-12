@@ -643,11 +643,26 @@ def _why(
 async def quiz_result(
     db: AsyncSession, user: CurrentUser, enrollment_id: uuid.UUID, attempt_id: uuid.UUID
 ) -> QuizResult:
-    await get_owned_enrollment(db, user, enrollment_id)
+    enrollment = await get_owned_enrollment(db, user, enrollment_id)
     attempt = await db.get(QuizAttempt, attempt_id)
     if attempt is None or attempt.enrollment_id != enrollment_id or attempt.feedback is None:
         raise HTTPException(404, "no graded quiz")
-    return QuizResult.model_validate(attempt.feedback)
+    stored = QuizResult.model_validate(attempt.feedback)
+    # The scores, rule and why are a record of what happened then. Where to go next is about
+    # now: the learner may have completed concepts (or had remediation inserted) since, so the
+    # next step is recomputed from the current plan, and a test-out offer that's been acted on
+    # (or overtaken) is dropped rather than shown as a button that would 409.
+    cmap = await current_plan(db, enrollment)
+    rows = await progress_rows(db, enrollment.id)
+    offer = stored.test_out_offer
+    if offer is not None:
+        p = rows.get(offer.concept_id)
+        still_open = p is not None and p.status == ConceptStatus.unlocked and p.attempts == 0
+        if not still_open or offer.concept_id in cmap.test_out:
+            offer = None
+    return stored.model_copy(
+        update={"next_concept": _next_concept(cmap, rows), "test_out_offer": offer}
+    )
 
 
 # --- PC2.5: plan history --------------------------------------------------------------------------
