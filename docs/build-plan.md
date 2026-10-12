@@ -23,8 +23,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP2 | J2: learn, check, adapt | ✅ merged (PR #3) |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ merged (PR #4) |
 | CP4 | J3: org course grounded in docs | ✅ merged (PR #6) |
-| CP5 | Dashboard + eval harness | ✅ built, PR #7 ready for review (branch `cp5/dashboard-evals`): PC5.1 ✅, PC5.2 ✅ |
-| CP6 | Hardening + sample data, docs, tag `v0.1.0` | ✅ built, draft PR #8 stacked on #7 (branch `cp6/hardening`): PC6.1 ✅, PC6.2 ✅, PC6.3 ✅; tag after both merge |
+| CP5 | Dashboard + eval harness | ✅ merged (PR #7) |
+| CP6 | Hardening + sample data, docs, tag `v0.1.0` | ✅ built, PR #8 ready for review (branch `cp6/hardening`): PC6.1 ✅, PC6.2 ✅, PC6.3 ✅; tag after both merge |
 
 ## CP1: J1, create a course
 **Before starting:**
@@ -116,7 +116,8 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - Semantic-cache recall with MiniLM is ~33% of genuine paraphrases at the safe threshold (ADR-0026). Levers to try with `make eval-cache`: a stronger local embedding model (needs Kyle's OK), or embedding the title + mastery statement without the topic.
 - Org docs are immutable via the API (ADR-0028), so a revised doc is a new doc and a new course. If admins need real revisions, versioned docs (`doc_versions`) are the upgrade; the grounded-prompt composer hashes the docs it actually sends (✔︎ PC4.2), because `make seed` upserts seeded docs.
 - Grounding checks are deterministic (real sections, verbatim quotes, markers ↔ citations), but prose can still make an uncited claim. ✔︎ CP5's judge measures it (`make evals`); its first run found a couple of uncited Acme statements in one lesson. The judge itself needs human-labelled claims to be trusted (ADR-0031).
-- Grader calibration (CP5): exact 13/24, within one 24/24, all misses one point low. Kyle to decide whether labels a2, a5, a6 should follow the item rubric, or the rubric should change.
+- Grader calibration: relabelled to follow the item rubric (a2→1, a5/a6→2); now exact 19/24, within one 24/24. Two gaps: no answer is labelled 3 (add one that explains setup cost, reuse **and** what breaks at 5,000, without numbers), and the terse transfer answer a8 scores 3 against a label of 4.
+- Grounding: the second `make evals` run caught a lesson inventing "CPU and memory were never the constraint" (uncited, not in any doc). Levers: a rule in `ground-in-sources` against uncited causal claims about the org, or a per-sentence marker check for sentences that name an Acme service.
 - Grounded calls re-send the docs every time (~10k input tokens for the seeded set). They're first in the system prompt, so API prompt caching (a `cache_control` breakpoint after the docs, and cache-read tokens in `llm_calls`) is a small change if doc sets grow.
 - ~~PC4.3: the admin's template map needs `course_grounding` too~~: resolved in PC4.3. `grade` and `remediate.explain_change` aren't grounded (the rubric and the lesson already are).
 - The template map isn't checked against the docs by code: nothing proves each concept is covered. A concept → docs mapping (and a coverage view for admins) would make it checkable (ADR-0030); until then it's the CP5 grounding judge's job.

@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP5 ✅ built, PR #7 ready for review (CI green). **CP6 ✅ built** (sample data, reset, warm-cache, docs, run-through) on `cp6/hardening`, draft PR #8 stacked on CP5. Next: Kyle merges PR #7 (merge commit); then retarget PR #8 to `main`, merge `origin/main` into `cp6/hardening` (no rebase), push, mark ready; Kyle merges; then `git tag v0.1.0 && git push --tags`.
+> **Current status:** CP5 ✅ merged (PR #7). **CP6 ✅ built** (sample data, reset, warm-cache, docs, run-through) on `cp6/hardening`, PR #8 (retargeted to `main`) ready for review. Next: Kyle merges PR #8; then `git tag v0.1.0 && git push --tags`.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
@@ -29,7 +29,7 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 **Tradeoffs accepted**
 - The generated `docs/architecture/` (visualizer) is a CP1 snapshot; `docs/architecture.md` is the current hand-written one. Rerun `/visualizer:architecture` to refresh it.
 - warm-cache's cache-only calls are logged against the org course with no learner, so org impact shows a little spend or savings not tied to a person.
-- `make evals` wasn't re-run at this boundary: nothing since CP5 changed a prompt, a skill or the wrapper.
+- After CP5 merged, Kyle approved relabelling the grader set to follow the item rubric (a2→1, a5/a6→2) and `make evals` was re-run ($0.57, `backend/evals/results/2026-10-12-relabelled.md`): grader exact 19/24 (from 13/24), within one 24/24, diagnosis consistent 4/4. The judge caught one real invention ("CPU and memory were never the constraint", in no doc): logged as a follow-up, not fixed in Phase 1. The set now has no answer labelled 3.
 
 **How to verify**
 - `make reset && make warm-cache && make dev`, then follow `docs/walkthrough.md`.
