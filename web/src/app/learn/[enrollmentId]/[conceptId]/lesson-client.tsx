@@ -5,8 +5,9 @@
 // model writes it. A locked concept (409) shows the override gate instead (spec §4.8).
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+import { BackLink, Page } from "@/components/app-shell";
 import { Markdown } from "@/components/markdown";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { OverrideGate } from "@/components/override-gate";
@@ -14,9 +15,11 @@ import { PrototypeFrame } from "@/components/prototype-frame";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
+import { CACHE_LABEL } from "@/lib/labels";
 import { postSse } from "@/lib/sse";
 
 type LessonView = Schemas["LessonView"];
+type EnrollmentDetail = Schemas["EnrollmentDetail"];
 // SSE payloads aren't in the OpenAPI schema (the route yields ServerSentEvent); this mirrors
 // FieldDeltaEvent in backend/app/services/learning.py.
 type Delta = { field: string; text: string; replace: boolean };
@@ -27,9 +30,15 @@ export default function LessonPage() {
   const router = useRouter();
   const [fields, setFields] = useState<Fields>({});
   const [lesson, setLesson] = useState<LessonView | null>(null);
+  const [plan, setPlan] = useState<EnrollmentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    // The concept's title and place in the plan (no model call).
+    apiGet<EnrollmentDetail>(`/enrollments/${enrollmentId}`).then(setPlan, () => {});
+  }, [enrollmentId]);
 
   useEffect(() => {
     // Aborting on cleanup also covers React's dev double-mount: the server sees the client go
@@ -74,13 +83,45 @@ export default function LessonPage() {
 
   const shown: Fields = lesson?.content ?? fields;
   const streaming = lesson === null && error === null && !locked;
+  const concept = plan?.concept_map.concepts.find((c) => c.id === conceptId);
+  const position = plan ? plan.progress.findIndex((p) => p.concept_id === conceptId) + 1 : 0;
+
+  const header = (
+    <header className="space-y-3">
+      <BackLink href={`/learn/${enrollmentId}`}>Plan</BackLink>
+      {concept && (
+        <>
+          <h1>{concept.title}</h1>
+          <p className="text-muted-foreground max-w-[68ch]">{concept.mastery_statement}</p>
+        </>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+        {position > 0 && plan && (
+          <span className="text-muted-foreground">
+            Concept <span className="num text-foreground">{position}</span> of{" "}
+            <span className="num text-foreground">{plan.progress.length}</span>
+          </span>
+        )}
+        {lesson?.kind === "remediation" && <Badge variant="orange">Remediation</Badge>}
+        {lesson && (
+          <Badge variant="cyan" title="How this lesson was produced (the LLM cache tier that served it)">
+            {CACHE_LABEL[lesson.cache_result]}
+          </Badge>
+        )}
+        {streaming && (
+          <span className="text-blue-ink inline-flex items-center gap-2">
+            <span className="bg-blue size-1.5 animate-pulse rounded-full" />
+            Writing your lesson…
+          </span>
+        )}
+      </div>
+    </header>
+  );
 
   if (locked) {
     return (
-      <main className="mx-auto max-w-2xl p-10 space-y-6">
-        <Link href={`/learn/${enrollmentId}`} className="text-muted-foreground text-sm hover:underline">
-          ← Plan
-        </Link>
+      <Page className="space-y-8">
+        {header}
         <OverrideGate
           enrollmentId={enrollmentId}
           conceptId={conceptId}
@@ -89,24 +130,17 @@ export default function LessonPage() {
             setAttempt((n) => n + 1);
           }}
         />
-      </main>
+      </Page>
     );
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-10 space-y-8">
-      <header className="flex items-center gap-3">
-        <Link href={`/learn/${enrollmentId}`} className="text-muted-foreground text-sm hover:underline">
-          ← Plan
-        </Link>
-        {lesson && <Badge variant="outline">{lesson.cache_result.replace("_", " ")}</Badge>}
-        {lesson?.kind === "remediation" && <Badge>remediation</Badge>}
-        {streaming && <span className="text-muted-foreground text-sm">Writing your lesson…</span>}
-      </header>
+    <Page className="space-y-12">
+      {header}
 
       {error && (
-        <div className="flex items-center gap-3">
-          <span className="text-destructive text-sm">{error}</span>
+        <div className="border-red bg-red/10 flex flex-wrap items-center gap-3 rounded-md border-l-2 px-4 py-3">
+          <span className="text-red-ink text-sm">{error}</span>
           <Button
             size="sm"
             variant="outline"
@@ -116,48 +150,55 @@ export default function LessonPage() {
               setAttempt((n) => n + 1);
             }}
           >
-            Retry
+            Try again
           </Button>
         </div>
       )}
 
       {shown.explanation_md && <Markdown>{shown.explanation_md}</Markdown>}
       {shown.example_md && (
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold">Worked example</h2>
+        <LessonSection title="Worked example">
           <Markdown>{shown.example_md}</Markdown>
-        </section>
+        </LessonSection>
       )}
       {shown.diagram_mermaid && (
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold">Diagram</h2>
+        <LessonSection title="Diagram">
           {lesson ? (
             <MermaidDiagram source={lesson.content.diagram_mermaid} />
           ) : (
-            <pre className="bg-muted overflow-x-auto rounded p-3 text-xs">{shown.diagram_mermaid}</pre>
+            <pre className="bg-muted num overflow-x-auto rounded-md p-3 text-xs">{shown.diagram_mermaid}</pre>
           )}
-        </section>
+        </LessonSection>
       )}
       {lesson?.prototype && (
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold">Try it: {lesson.prototype.title}</h2>
-          <p className="text-muted-foreground text-sm">
+        <LessonSection title={`Try it: ${lesson.prototype.title}`}>
+          <p className="text-muted-foreground">
             Change the knobs until something surprises you, then work out why.
           </p>
           <PrototypeFrame title={lesson.prototype.title} html={lesson.prototype.html} />
-        </section>
+        </LessonSection>
       )}
       {lesson && (
-        <section className="space-y-2 border-t pt-6">
-          <p className="text-muted-foreground text-sm">
-            Next: 4 questions in situations the lesson didn&apos;t use, plus one to explain in your own
-            words. No hints; only your first answers count.
+        <section className="bg-muted/60 space-y-4 rounded-lg p-6">
+          <h2>Check your understanding</h2>
+          <p className="max-w-[60ch]">
+            Four questions set in situations the lesson didn&apos;t use, plus one to explain in your
+            own words. No hints, and only your first answers count.
           </p>
           <Link href={`/learn/${enrollmentId}/${conceptId}/quiz`} className={buttonVariants()}>
-            Take the quiz →
+            Take the quiz
           </Link>
         </section>
       )}
-    </main>
+    </Page>
+  );
+}
+
+function LessonSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-4 border-t pt-8">
+      <h2>{title}</h2>
+      {children}
+    </section>
   );
 }

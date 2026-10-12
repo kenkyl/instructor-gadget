@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Page } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiGet, apiPost, type Schemas } from "@/lib/api";
 
 type SeededUser = Schemas["SeededUser"];
@@ -31,27 +31,37 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md p-10 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Instructor</h1>
-        <p className="text-muted-foreground">Choose a user to continue.</p>
-      </div>
-      {error && <p className="text-destructive text-sm">{error}</p>}
+    <Page className="space-y-10 sm:py-20 [&>*]:max-w-xl">
       <div className="space-y-3">
-        {users.map((u) => (
-          <Card key={u.username} size="sm">
-            <CardHeader className="grid-cols-[1fr_auto] items-center">
+        <h1>An instructor that checks what you actually know</h1>
+        <p className="text-muted-foreground max-w-[56ch] text-lg">
+          It tests where you really are, teaches one concept at a time, and re-plans from how you do
+          on each quiz.
+        </p>
+      </div>
+      <section className="space-y-3" aria-labelledby="who">
+        <h2 id="who" className="text-base">
+          Continue as
+        </h2>
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        <ul className="divide-y rounded-lg border">
+          {users.map((u) => (
+            <li key={u.username} className="flex items-center justify-between gap-4 px-4 py-3">
               <div>
-                <CardTitle>{u.username}</CardTitle>
-                <CardDescription>{u.display_name}</CardDescription>
+                <p className="text-strong font-semibold">{u.display_name}</p>
+                <p className="text-muted-foreground text-sm">{u.username}</p>
               </div>
-              <Button onClick={() => login(u.username)} disabled={busy !== null}>
+              <Button
+                variant={busy === u.username ? "default" : "outline"}
+                onClick={() => login(u.username)}
+                disabled={busy !== null}
+              >
                 {busy === u.username ? "Signing in…" : "Continue"}
               </Button>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
-    </main>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </Page>
   );
 }
