@@ -6,6 +6,7 @@ from app.auth import CurrentUserDep
 from app.deps import Db
 from app.services import org_docs
 from app.services.org_docs import OrgDocDetail, OrgDocIn, OrgDocSummary, OrgMembershipOut
+from app.services.trace import OrgImpactResponse, get_org_impact
 
 router = APIRouter(prefix="/orgs", tags=["orgs"])
 
@@ -35,3 +36,10 @@ async def upload_doc(
     if not created:
         response.status_code = 200
     return doc
+
+
+@router.get("/{org_slug}/impact")
+async def impact(org_slug: str, user: CurrentUserDep, db: Db) -> OrgImpactResponse:
+    """What the cache did across the org's courses: calls, hit rate, $ spent and saved, per course
+    and per learner (admins only; counts and dollars, never excerpts)."""
+    return await get_org_impact(db, user, org_slug)

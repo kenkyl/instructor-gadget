@@ -62,7 +62,7 @@ test: ## Backend tests against a throwaway instructor_test DB (needs `make up`)
 eval-cache: ## Semantic-cache threshold sweep + intake-guard re-check on the real MiniLM model (needs `make up`)
 	cd backend && uv run python -m evals.cache_eval
 
-eval-grounding: ## Live: 2 lessons grounded in the seeded Acme AI docs; prints citations and gaps (~$0.10, needs ANTHROPIC_API_KEY)
+eval-grounding: ## Live: 2 lessons + a template map grounded in the seeded Acme AI docs (~$0.15, needs ANTHROPIC_API_KEY)
 	cd backend && uv run python -m evals.grounding_eval
 
 lint: ## ruff + pyright + eslint + tsc

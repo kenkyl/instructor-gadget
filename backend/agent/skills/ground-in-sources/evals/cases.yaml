@@ -48,3 +48,28 @@ grounded_teach:
       - "len(output.not_in_docs) >= 1"
       - "the explanation says this isn't covered in your docs (LLM judge)"
       - "no Acme-specific threshold, team or procedure for Kafka lag is invented (LLM judge)"
+
+# The admin's template map (PC4.3, ADR-0030): docs in the prompt, no citation rules, no assessment.
+grounded_map:
+  - id: acme-week-one
+    call: map-concepts.map
+    docs: [acme/on-call-runbook, acme/service-map, acme/postmortem-pool-exhaustion, acme/how-we-ship]
+    input:
+      config:
+        topic: "Technical readiness at Acme AI"
+        target_hours: 3
+        target_level: intermediate
+        self_level: novice
+        formats: [reading, quizzes]
+      mission:
+        goal: "Be useful on the on-call rotation in my first week"
+        expert_means: "I can read the service map, follow the runbook and explain how we ship"
+        mode: foundation
+      assessed_level: novice
+      gaps: []
+      target_minutes: 180
+    assert:
+      - "6-12 concepts, minutes within 15% of 180 (enforced by the validator)"
+      - "every concept is something the docs teach: runbook steps, services, the pool-exhaustion postmortem, shipping (LLM judge)"
+      - "no concept about a tool or practice the docs never mention (LLM judge)"
+      - "the rationale names the documents the path is drawn from"

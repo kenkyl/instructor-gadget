@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Iterator
 
 import pytest
+import redis
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -29,6 +30,11 @@ async def _cleanup() -> None:
             await conn.execute(delete(OrgDoc).where(OrgDoc.slug.like("t-%")))
     finally:
         await engine.dispose()
+    # Assigned learners' dashboards were cached: a deleted course must not linger in them.
+    r = redis.Redis.from_url(get_settings().redis_url)
+    keys = list(r.scan_iter("dash:*"))
+    if keys:
+        r.unlink(*keys)
 
 
 @pytest.fixture(autouse=True)

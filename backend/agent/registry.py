@@ -29,6 +29,10 @@ SHARED_DIR = SKILLS_DIR / "_shared"
 
 CachePolicy = Literal["exact", "semantic", "never"]
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
+# What an org course's docs do for a call. "cited": the docs plus the ground-in-sources rules (the
+# output has citations, gaps or a quiz `source`, ADR-0029). "docs": the docs only, and the call's
+# own instructions say what to do with them (a concept map has nothing to cite).
+GroundingMode = Literal["cited", "docs"]
 
 # Learner-specific by definition: caching these would serve one learner's result to another
 # (ADR-0007). Enforced here so a frontmatter typo can't silently enable caching.
@@ -49,6 +53,7 @@ class CallSpec(BaseModel):
     # Thinking tokens count toward max_tokens, so leave headroom above the visible output.
     max_tokens: int = Field(default=8000, gt=0)
     effort: Effort | None = None  # None = the model's default effort
+    grounding: GroundingMode = "cited"  # how an org course's docs apply (see GroundingMode)
 
 
 class SkillMeta(BaseModel):
@@ -180,17 +185,22 @@ class Registry:
         c = self.call(skill, call)
         digest = c.prompt_hash
         if grounded:
-            digest = _sha(digest, self._grounding().instructions)
+            # The prompt differs once docs are in it, so the version must too. A call that cites
+            # them also carries the grounding rules, so editing those re-keys it.
+            rules = self._grounding().instructions if c.spec.grounding == "cited" else ""
+            digest = _sha(digest, c.spec.grounding, rules)
         return f"{skill}@{self.skills[skill].meta.version}+{digest[:8]}"
 
     def system_prompt(self, skill: str, call: str, *, sources: str | None = None) -> str:
         """Shared conduct rules + skill + call; for an org course, the source documents first
-        and the grounding rules last.
+        and the grounding rules last (when the call cites them).
 
         Documents go first: long material above the instructions that use it is how the model
         reads it best, and a doc set's text is then an identical prefix for every call on that
         course, which prompt caching could reuse. The grounding rules go last because they
-        override the call's own "leave citations empty" (ADR-0029)."""
+        override the call's own "leave citations empty" (ADR-0029). A call with
+        `grounding: docs` (the template map, ADR-0030) gets no rules: they describe fields its
+        output doesn't have."""
         c = self.call(skill, call)
         parts = [
             "# Instructor conduct rules\n\n" + self.conduct,
@@ -199,7 +209,8 @@ class Registry:
         ]
         if sources is not None:
             parts.insert(0, "# Source documents\n\n" + sources)
-            parts.append("# Grounding rules\n\n" + self._grounding().instructions)
+            if c.spec.grounding == "cited":
+                parts.append("# Grounding rules\n\n" + self._grounding().instructions)
         return "\n\n---\n\n".join(parts)
 
     def _grounding(self) -> Skill:

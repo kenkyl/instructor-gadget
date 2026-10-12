@@ -341,7 +341,7 @@ Links a user to an org, with a role. The PK is `(user_id, org_id)`.
 | Operation | When | How |
 |---|---|---|
 | Write | Seed | Upsert on `(user_id, org_id)` |
-| Read | Authorization: members read an org's docs; only admins upload them and create org courses (✔︎ PC4.1: `org_docs` service); admins assign (🔜 PC4.3). Dashboard org labels | Join on user |
+| Read | Authorization: members read an org's docs; only admins upload them and create org courses (✔︎ PC4.1: `org_docs` service); admins build templates and assign them (✔︎ PC4.3: `courses` service). Dashboard org labels | Join on user |
 
 | user | org | role |
 |---|---|---|
@@ -374,8 +374,8 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | Operation | When | How |
 |---|---|---|
 | Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner. With `org_slug` + `doc_slugs` (✔︎ PC4.1, admins only): `scope=org`, `org_id`, no owner, and `doc_ids` + `doc_set_hash` pinned from the chosen docs (1+ docs, within `MAX_SET_CHARS`) |
-| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, once only), and accept (✔︎ PC1.4: → `active`) | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`) and edited before accept (✔︎ PC1.4, `DELETE /api/courses/{id}/map/concepts/{concept_id}`: dependents are rewired, ADR-0017); read-only once `active` |
-| Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; a personal course by its owner, an org course by an admin of its org (`get_owned_course`). Learners reach an org course through their enrollment (🔜 PC4.3) |
+| Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, once only), and accept (✔︎ PC1.4: → `active`). An org course skips probe and assessment (ADR-0004): map goes `draft` → `mapped` from the cohort level and its docs (✔︎ PC4.3, ADR-0030), and accept makes it an assignable template without enrolling anyone | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`) and edited before accept (✔︎ PC1.4, `DELETE /api/courses/{id}/map/concepts/{concept_id}`: dependents are rewired, ADR-0017); read-only once `active` |
+| Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; a personal course by its owner, an org course by an admin of its org (`get_owned_course`). Learners reach an org course through their enrollment (✔︎ PC4.3); they never read the course row |
 
 ```json
 {
@@ -407,7 +407,7 @@ The **shared definition** of a course: what it's about and how it's configured. 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Personal course accepted (✔︎ PC1.4, `POST /api/courses/{id}/accept`); admin assigns an org course (🔜 PC4.3) | Insert (`source=owner`, `current_plan_version=1`), then plan v1 and `concept_progress`, in **one transaction**; then `invalidate_dashboard` |
+| Write | Personal course accepted (✔︎ PC1.4, `POST /api/courses/{id}/accept`); admin assigns an org course (✔︎ PC4.3, `POST /api/courses/{id}/assign`) | Insert (`source=owner`, or `source=assigned` + `assigned_by`; `current_plan_version=1`), then plan v1 (`diagnosis`, or `assignment`: a copy of `template_plan`) and `concept_progress`, in **one transaction**; then `invalidate_dashboard` for each new learner. Assigning a learner twice inserts nothing (unique `course_id, user_id`); the admin's enrollment list (`GET /api/courses/{id}/assignments`) shows counts only |
 | Update | Every plan change (`current_plan_version`); course completion (`status`, `completed_at`) | Same transaction as the `plan_versions` insert |
 | Read | Dashboard (active and complete, badges), every learning-loop request | By id; list by user |
 
@@ -501,7 +501,7 @@ The diagnostic probe (3–4 questions at the claimed level), the learner's answe
 
 | Operation | When | How |
 |---|---|---|
-| Write | Plan accepted (✔︎ PC1.4) or assigned (🔜 PC4.3): one row per concept (`locked`, or `unlocked` if it has no prereqs: `pedagogy.initially_unlocked`) | Bulk insert, same transaction as the enrollment |
+| Write | Plan accepted (✔︎ PC1.4) or assigned (✔︎ PC4.3): one row per concept (`locked`, or `unlocked` if it has no prereqs: `pedagogy.initially_unlocked`) | Bulk insert, same transaction as the enrollment |
 | Update | Quiz graded (✔︎ PC2.4–2.5): `mastery`, `band`, `last_score`, `attempts`, `fsrs_card`, `due`; `complete` at solid or better; the gate is recomputed (locked → unlocked when every prereq is solid; an open concept re-locks when a remediation is inserted before it, unless overridden). Override (✔︎ PC2.6): locked → unlocked. A remediation concept gets its own row when inserted | Values computed by the pure functions in `pedagogy.py`; the service writes them (`app/services/quiz.py`) |
 | Read | Unlock gate before opening a concept; dashboard mastery bands and due count; quiz distractor targeting | By enrollment; `due <= now()` for the review count |
 
@@ -699,7 +699,7 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | Operation | When | How |
 |---|---|---|
 | Write | Every API request through the LLM client wrapper (✔︎ PC1.1), and every cache lookup result (🔜 CP2/CP3) | Insert-only, **one row per API request**: a call that is retried after a validation error writes two rows. Written in its own transaction (`DbCallSink`), so the row survives a failed request. Never-cached skills log `cache_result=bypass` |
-| Read | Instructor trace page and cache impact tile (✅ PC3.4, `GET /api/trace?course_id=`): the newest 200 rows, plus one aggregate over all matching rows: lookups (miss + hits; bypass never looks), hit rate, calls avoided, $ spent and saved, seconds saved (original generation time − the hit's own latency) | **Only the caller's own rows** (`user_id`), optionally one course (ADR-0027) |
+| Read | Instructor trace page and cache impact tile (✅ PC3.4, `GET /api/trace?course_id=`): the newest 200 rows, plus one aggregate over all matching rows: lookups (miss + hits; bypass never looks), hit rate, calls avoided, $ spent and saved, seconds saved (original generation time − the hit's own latency) | **Only the caller's own rows** (`user_id`), optionally one course (ADR-0027). An org admin's view (✅ PC4.3, `GET /api/orgs/{slug}/impact`, ADR-0030) is the same aggregate over every row whose course belongs to the org, grouped by course and by learner, with no excerpts |
 
 | skill / call | cache_result | similarity | tokens in/out | latency | cost | saved |
 |---|---|---|---|---|---|---|

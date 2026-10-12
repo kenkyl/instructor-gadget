@@ -136,3 +136,20 @@ def test_ground_in_sources_is_a_modifier() -> None:
     print(f"\n  ground-in-sources: {personal} → {grounded}")
     assert personal != grounded and grounded.startswith("teach-concept@0.1.0+")
     assert "# Grounding rules" not in r.system_prompt("teach-concept", "teach")
+
+
+def test_a_docs_only_call_gets_the_docs_but_not_the_citation_rules() -> None:
+    r = Registry()
+    assert r.call("map-concepts", "map").spec.grounding == "docs"
+    assert r.call("teach-concept", "teach").spec.grounding == "cited"
+    docs = "<documents>…</documents>"
+
+    map_prompt = r.system_prompt("map-concepts", "map", sources=docs)
+    assert map_prompt.startswith("# Source documents\n\n" + docs)
+    assert "# Grounding rules" not in map_prompt  # its output has nothing to cite
+    teach_prompt = r.system_prompt("teach-concept", "teach", sources=docs)
+    assert teach_prompt.rstrip().endswith(r._grounding().instructions.rstrip())
+
+    # Grounded and personal prompts differ, so their versions do too, for both modes.
+    for skill, call in (("map-concepts", "map"), ("teach-concept", "teach")):
+        assert r.prompt_version(skill, call) != r.prompt_version(skill, call, grounded=True)

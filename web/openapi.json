@@ -512,7 +512,7 @@
           "courses"
         ],
         "summary": "Map Concepts",
-        "description": "Generate the concept map (once; afterwards the same map is returned).",
+        "description": "Generate the concept map (once; afterwards the same map is returned). An org course's\nmap is the cohort template, grounded in its docs, with no probe.",
         "operationId": "map_concepts_api_courses__course_id__map_post",
         "parameters": [
           {
@@ -641,7 +641,7 @@
           "courses"
         ],
         "summary": "Accept",
-        "description": "Accept the map: creates the enrollment, plan v1 and progress rows (idempotent).",
+        "description": "Accept the map (idempotent). Personal: creates the enrollment, plan v1 and progress rows.\nOrg: the template becomes assignable; nobody is enrolled.",
         "operationId": "accept_api_courses__course_id__accept_post",
         "parameters": [
           {
@@ -678,6 +678,136 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CourseDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/assignments": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Assignments",
+        "description": "An org course's members and who has it assigned (org admins only, like the course).",
+        "operationId": "assignments_api_courses__course_id__assignments_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assignments"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/assign": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Assign",
+        "description": "Assign the accepted template to org members: each gets an enrollment whose plan starts\nas a copy of it (idempotent per learner).",
+        "operationId": "assign_api_courses__course_id__assign_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assignments"
                 }
               }
             }
@@ -928,6 +1058,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrgDocDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_slug}/impact": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "summary": "Impact",
+        "description": "What the cache did across the org's courses: calls, hit rate, $ spent and saved, per course\nand per learner (admins only; counts and dollars, never excerpts).",
+        "operationId": "impact_api_orgs__org_slug__impact_get",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Slug"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgImpactResponse"
                 }
               }
             }
@@ -1806,6 +1995,113 @@
           "gaps"
         ],
         "title": "AssessOutput"
+      },
+      "AssignIn": {
+        "properties": {
+          "user_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "User Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_ids"
+        ],
+        "title": "AssignIn"
+      },
+      "AssigneeView": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "enrollment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrollment Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnrollmentStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "concepts_total": {
+            "type": "integer",
+            "title": "Concepts Total",
+            "default": 0
+          },
+          "concepts_complete": {
+            "type": "integer",
+            "title": "Concepts Complete",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role"
+        ],
+        "title": "AssigneeView",
+        "description": "An org member, and where they are in this course if it was assigned to them."
+      },
+      "Assignments": {
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "assignable": {
+            "type": "boolean",
+            "title": "Assignable"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/AssigneeView"
+            },
+            "type": "array",
+            "title": "Members"
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_id",
+          "assignable",
+          "members"
+        ],
+        "title": "Assignments"
       },
       "Band": {
         "type": "string",
@@ -2933,6 +3229,34 @@
         "title": "NotInDocs",
         "description": "Something the learner needs that the org's docs don't cover (spec \u00a75)."
       },
+      "OrgCourseImpact": {
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "learners": {
+            "type": "integer",
+            "title": "Learners"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/CacheImpact"
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_id",
+          "title",
+          "learners",
+          "impact"
+        ],
+        "title": "OrgCourseImpact"
+      },
       "OrgDocDetail": {
         "properties": {
           "slug": {
@@ -3059,6 +3383,68 @@
           "created_at"
         ],
         "title": "OrgDocSummary"
+      },
+      "OrgImpactResponse": {
+        "properties": {
+          "org_name": {
+            "type": "string",
+            "title": "Org Name"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/CacheImpact"
+          },
+          "courses": {
+            "items": {
+              "$ref": "#/components/schemas/OrgCourseImpact"
+            },
+            "type": "array",
+            "title": "Courses"
+          },
+          "learners": {
+            "items": {
+              "$ref": "#/components/schemas/OrgLearnerImpact"
+            },
+            "type": "array",
+            "title": "Learners"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_name",
+          "impact",
+          "courses",
+          "learners"
+        ],
+        "title": "OrgImpactResponse"
+      },
+      "OrgLearnerImpact": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "first_call_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Call At"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/CacheImpact"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "first_call_at",
+          "impact"
+        ],
+        "title": "OrgLearnerImpact"
       },
       "OrgMembershipOut": {
         "properties": {

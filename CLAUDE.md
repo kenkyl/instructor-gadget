@@ -65,7 +65,7 @@ Filled in as they come to exist (PC0.2+).
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
 | `make eval-cache` | Semantic-cache threshold sweep + intake-guard re-check, real MiniLM, no API calls (ADR-0026) |
-| `make eval-grounding` | Live: 2 lessons grounded in the seeded Acme AI docs; prints citations and gaps (~$0.10, ADR-0029) |
+| `make eval-grounding` | Live: 2 lessons + a template map grounded in the seeded Acme AI docs; prints citations, gaps and the map (~$0.15, ADR-0029, ADR-0030) |
 | `make lint` / `make fmt` | ruff + pyright + eslint + tsc / auto-format backend |
 | `make types` | Regenerate `web/src/lib/api-types.ts` from FastAPI's OpenAPI. Run after any API model change |
 

@@ -372,3 +372,24 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 - Docs are re-sent on every grounded call (~10k input tokens for the seeded set, about 2¢ on Sonnet 5.5). API prompt caching on the docs prefix is the follow-up if doc sets grow.
 - Personal-course prompt versions and cache keys are unchanged.
 **One-liner:** The model cites by copying anchors and quoting the doc, code checks every quote is really in that section, and the docs' own hash keeps an org's lessons in that org's cache.
+
+## ADR-0030: The org template flow: a docs-grounded map, accept makes it assignable, assigning copies the plan
+**Context:** ADR-0004 says an org admin builds a template (cohort level + docs → grounded map → accept) and each assigned learner's enrollment starts from a copy. Building it raised four questions: what the map call gets with no probe and no assessment, whether a map cites (it has no field for it), what "accept" means when the admin must not be enrolled, and how an admin can see the cache's org-wide effect without seeing what learners wrote (ADR-0027's follow-up).
+**Decision:**
+- **Map:** for an org course the call runs with the course's docs in the prompt, `assessed_level` = the cohort's starting level (`config.self_level`, shown as "Learners start") and no gaps. A call declares how docs apply in its frontmatter: `grounding: cited` (the default: docs plus the ADR-0029 citation rules) or `grounding: docs` (docs only; the call's own instructions say what to do with them). `map-concepts.map` is `docs`: its output has nothing to cite, so the citation rules would describe fields it doesn't have. The grounded `prompt_version` includes the mode.
+- **Accept:** on an org course, `mapped` → `active` enrolls nobody and makes the template read-only and assignable. After that a change is a plan version on an enrollment (ADR-0016).
+- **Assign:** an admin picks members of the org; each gets their own enrollment (`source=assigned`, `assigned_by`), plan v1 = a copy of the template (trigger `assignment`) and one progress row per concept, in one transaction, then each learner's dashboard is invalidated. Assigning someone twice changes nothing. Only an accepted template, only org members.
+- **Org impact:** `GET /api/orgs/{slug}/impact` (admins only) is the trace's aggregate with no `user_id` filter, over every call made on the org's courses, per course and per learner in order of first use. Counts and dollars only: no prompt or response excerpts, which can hold a learner's answers.
+**Alternatives:**
+- A probe the admin takes: diagnoses the wrong person (ADR-0004).
+- Citations on map concepts (a concept → docs mapping in the stored plan): a change to every stored plan's shape for a coverage view nobody has asked for yet. A follow-up if admins want one.
+- Caching the template map: one admin builds it once and the result is stored, so there is no second request to serve.
+- Accept enrolling the admin: the template would show up as the admin's own course and blur template with enrollment.
+- Per-learner excerpts in the admin's view: they hold the learner's answers.
+**Consequences:**
+- Nothing in code checks that a map concept is covered by the docs (the map is language only). Per-concept faithfulness is the CP5 grounding judge's; `make eval-grounding` has a map case.
+- A template can't be corrected after accept: build another course (docs are immutable, ADR-0028).
+- The personal map prompt also carries the "when source documents are given" section, unused without docs (about 200 tokens; the map isn't cached).
+- Grounded lesson and quiz prompt versions changed once (the mode joined the hash), so dev caches from PC4.2 simply miss. Personal versions are unchanged.
+- Admins see usage per learner (calls, hit rate, dollars), never content.
+**One-liner:** The admin builds the course once from the docs, assigning gives each learner their own copy of the plan, and the admin sees what the cache saved without seeing anything a learner wrote.

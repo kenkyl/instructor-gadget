@@ -59,6 +59,11 @@ export function Dashboard() {
               Org docs
             </Link>
           )}
+          {orgs.some((o) => o.role === "admin") && (
+            <Link href="/org/impact" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+              Org impact
+            </Link>
+          )}
           <Link href="/trace" className={buttonVariants({ variant: "ghost", size: "sm" })}>
             Trace
           </Link>

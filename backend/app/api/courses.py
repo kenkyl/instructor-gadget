@@ -11,12 +11,16 @@ from app.deps import Db, LlmDep, RedisDep
 from app.models import Course
 from app.services.courses import (
     AnswersIn,
+    AssignIn,
+    Assignments,
     CourseDetail,
     CourseIntake,
     accept_map,
+    assign_course,
     course_detail,
     create_course,
     get_owned_course,
+    list_assignments,
     remove_concept,
     run_assess,
     run_map,
@@ -87,7 +91,8 @@ async def assess(
 async def map_concepts(
     course: OwnedCourseDep, user: CurrentUserDep, db: Db, llm: LlmDep
 ) -> CourseDetail:
-    """Generate the concept map (once; afterwards the same map is returned)."""
+    """Generate the concept map (once; afterwards the same map is returned). An org course's
+    map is the cohort template, grounded in its docs, with no probe."""
     try:
         await run_map(db, llm, user, course)
     except LLMRefusal as err:
@@ -110,6 +115,22 @@ async def remove_map_concept(
 async def accept(
     course: OwnedCourseDep, user: CurrentUserDep, db: Db, redis: RedisDep
 ) -> CourseDetail:
-    """Accept the map: creates the enrollment, plan v1 and progress rows (idempotent)."""
+    """Accept the map (idempotent). Personal: creates the enrollment, plan v1 and progress rows.
+    Org: the template becomes assignable; nobody is enrolled."""
     await accept_map(db, redis, user, course)
     return await course_detail(db, user, course)
+
+
+@router.get("/{course_id}/assignments")
+async def assignments(course: OwnedCourseDep, db: Db) -> Assignments:
+    """An org course's members and who has it assigned (org admins only, like the course)."""
+    return await list_assignments(db, course)
+
+
+@router.post("/{course_id}/assign")
+async def assign(
+    body: AssignIn, course: OwnedCourseDep, user: CurrentUserDep, db: Db, redis: RedisDep
+) -> Assignments:
+    """Assign the accepted template to org members: each gets an enrollment whose plan starts
+    as a copy of it (idempotent per learner)."""
+    return await assign_course(db, redis, user, course, body.user_ids)
