@@ -2,35 +2,56 @@
   "meta": {
     "generator": "visualizer",
     "schema_version": 1,
-    "model_sha": "dd0d0ce0465cd8095fbea2482043552cd43b47b1",
-    "model_date": "2026-10-11",
-    "reviewed_sha": "dd0d0ce0465cd8095fbea2482043552cd43b47b1",
+    "model_sha": "104e5afc6187192f97fb771c86dbc878295b226a",
+    "model_date": "2026-10-12",
+    "reviewed_sha": "104e5afc6187192f97fb771c86dbc878295b226a",
     "dirty": false,
     "scope": ".",
     "detail": "container",
-    "readme": {"embed": true, "path": "README.md", "placement": "after-intro"},
+    "readme": {
+      "embed": true,
+      "path": "README.md",
+      "placement": "after:Architecture"
+    },
     "notes": [
       {
         "text": "keep it simple for v1, focus on the core components; should look clean and professional",
         "added": "2026-10-11"
+      },
+      {
+        "text": "output to docs/architecture; keep consistent with docs/architecture.md (the hand-written doc); regenerate from the current code. README keeps its hand-written diagram and embeds this overview collapsed beneath it.",
+        "added": "2026-10-12"
       }
     ]
   },
   "system": {
     "name": "Instructor",
-    "summary": "Instructor is an adaptive learning-course agent. A Next.js app proxies every /api call to a FastAPI backend, which runs product skills through an in-process agent package. The agent package is the only caller of the Anthropic API. Postgres is the source of truth; Redis holds sessions and caches that can always be rebuilt.",
+    "summary": "Instructor is an adaptive learning-course agent. A Next.js app proxies every /api call to a FastAPI backend, which runs surface-neutral services over an in-process agent package. Skills write the language; deterministic code decides scores, mastery, gating and re-planning. Every model call goes through one wrapper that checks two Redis cache tiers before the Anthropic API. Postgres is the source of truth; Redis holds sessions and caches that can always be rebuilt.",
     "highlights": [
       "Postgres is the only source of truth; Redis holds nothing that can't be rebuilt.",
+      "Skills do language; code does decisions: scoring, mastery, gating, adaptation and FSRS are pure functions in agent/pedagogy.py.",
       "Every LLM call goes through one wrapper: Pydantic-validated output, one retry, every attempt logged to llm_calls.",
-      "The browser only talks to Next.js, which proxies /api/* to FastAPI, so the session cookie stays same-origin.",
-      "ANTHROPIC_API_KEY lives in .env and is read by the API process only; the browser never sees it.",
-      "Both data stores bind to 127.0.0.1, so they are not exposed on the network."
+      "diagnose, grade and remediate are never cached, and neither is any request that carries a learner's misconceptions.",
+      "ANTHROPIC_API_KEY is read by the API process only, and both data stores bind to 127.0.0.1."
     ]
   },
   "boundaries": [
-    {"id": "your-machine", "name": "Your machine", "kind": "local"},
-    {"id": "docker", "name": "Docker Compose", "kind": "container", "parent": "your-machine"},
-    {"id": "anthropic-cloud", "name": "Anthropic", "kind": "saas"}
+    {
+      "id": "your-machine",
+      "name": "Your machine",
+      "kind": "local"
+    },
+    {
+      "id": "docker",
+      "name": "Docker Compose",
+      "kind": "container",
+      "parent": "your-machine"
+    },
+    {
+      "id": "anthropic-cloud",
+      "name": "Anthropic",
+      "kind": "saas"
+    }
   ],
   "components": [
     {
@@ -38,9 +59,11 @@
       "name": "Learner",
       "kind": "client",
       "boundary": "your-machine",
-      "responsibility": "Takes a course through the browser: intake, diagnostic, lessons and quizzes.",
+      "responsibility": "Takes a course through the browser: intake, diagnostic, lessons and quizzes; admins also manage org docs and courses.",
       "tech": "Browser",
-      "evidence": ["web/src/app/"]
+      "evidence": [
+        "web/src/app/"
+      ]
     },
     {
       "id": "web",
@@ -49,16 +72,29 @@
       "boundary": "your-machine",
       "responsibility": "Renders the UI, redirects visitors without a session cookie, and proxies /api/* to FastAPI.",
       "tech": "Next.js 16, :3000",
-      "evidence": ["web/next.config.ts", "web/src/proxy.ts", "web/src/app/"]
+      "evidence": [
+        "web/next.config.ts",
+        "web/src/proxy.ts",
+        "web/src/app/"
+      ]
     },
     {
       "id": "api",
       "name": "API",
       "kind": "service",
       "boundary": "your-machine",
-      "responsibility": "Authenticates the user, enforces ownership, runs services and routes skill calls to the agent.",
+      "responsibility": "Authenticates the user, enforces ownership and the unlock gate, and runs the services that call the agent.",
       "tech": "FastAPI, :8000",
-      "evidence": ["backend/app/main.py", "backend/app/api/", "backend/app/auth.py", "backend/app/services/"]
+      "members": [
+        "Routers (web surface)",
+        "Services"
+      ],
+      "evidence": [
+        "backend/app/main.py",
+        "backend/app/api/",
+        "backend/app/auth.py",
+        "backend/app/services/"
+      ]
     },
     {
       "id": "agent",
@@ -67,70 +103,445 @@
       "boundary": "your-machine",
       "responsibility": "Loads product skills and prompts, and makes every model call through one validated, logged client.",
       "tech": "In-process Python",
-      "members": ["Skill registry", "LLM client wrapper", "diagnose skill"],
-      "evidence": ["backend/agent/registry.py", "backend/agent/llm.py", "backend/agent/skills/"]
+      "members": [
+        "Skill registry",
+        "LLM client wrapper",
+        "Skills"
+      ],
+      "evidence": [
+        "backend/agent/registry.py",
+        "backend/agent/llm.py",
+        "backend/agent/skills/"
+      ]
+    },
+    {
+      "id": "pedagogy",
+      "name": "Pedagogy rules",
+      "kind": "module",
+      "boundary": "your-machine",
+      "responsibility": "Decides scores, mastery, bands, the unlock gate, adaptation rules and review dates; no model involved.",
+      "tech": "Pure code, FSRS",
+      "members": [
+        "pedagogy",
+        "plan (DAG validation, diff)"
+      ],
+      "evidence": [
+        "backend/agent/pedagogy.py",
+        "backend/agent/plan.py"
+      ]
+    },
+    {
+      "id": "cache",
+      "name": "LLM cache tiers",
+      "kind": "module",
+      "boundary": "your-machine",
+      "responsibility": "Serves a repeated or reworded request without a model call: exact key first, then a tag-filtered semantic match.",
+      "tech": "RedisVL, local MiniLM",
+      "members": [
+        "Exact tier",
+        "Semantic tier"
+      ],
+      "evidence": [
+        "backend/agent/cache.py",
+        "backend/agent/semantic.py",
+        "doc:docs/architecture.md#four-uses-of-redis"
+      ]
+    },
+    {
+      "id": "sources",
+      "name": "Grounding",
+      "kind": "module",
+      "boundary": "your-machine",
+      "responsibility": "Splits org docs into anchored sections and checks every citation's section and verbatim quote.",
+      "tech": "In-process Python",
+      "evidence": [
+        "backend/agent/sources.py",
+        "backend/app/services/org_docs.py",
+        "doc:docs/architecture.md#org-courses-j3"
+      ]
+    },
+    {
+      "id": "guard",
+      "name": "Intake guard",
+      "kind": "module",
+      "boundary": "your-machine",
+      "responsibility": "Rejects crude, off-topic, dangerous and prompt-injection course requests before anything is stored or sent.",
+      "tech": "RedisVL router, local MiniLM",
+      "evidence": [
+        "backend/agent/guard.py",
+        "backend/app/api/courses.py"
+      ]
     },
     {
       "id": "postgres",
       "name": "Postgres",
       "kind": "datastore",
       "boundary": "docker",
-      "responsibility": "Source of truth for users, courses, enrollments, assessments, progress and the LLM call log.",
+      "responsibility": "Source of truth for users, orgs, docs, courses, plans, progress, lessons, quizzes and the LLM call log.",
       "tech": "Postgres 16",
       "holds": [
-        {"data": "Orgs, users, courses, enrollments, assessments, plans, progress", "lifetime": "Durable"},
-        {"data": "llm_calls: one row per model request", "lifetime": "Durable"}
+        {
+          "data": "Orgs, users, courses, enrollments, plan versions, progress, lessons, quiz attempts, misconceptions",
+          "lifetime": "Durable"
+        },
+        {
+          "data": "Org docs: immutable, sectioned, hashed",
+          "lifetime": "Durable"
+        },
+        {
+          "data": "llm_calls: one row per model attempt",
+          "lifetime": "Durable"
+        }
       ],
-      "evidence": ["docker-compose.yml", "backend/app/models.py", "backend/migrations/", "docs/data-model.md"]
+      "evidence": [
+        "docker-compose.yml",
+        "backend/app/models.py",
+        "backend/migrations/",
+        "docs/data-model.md"
+      ]
     },
     {
       "id": "redis",
       "name": "Redis",
       "kind": "datastore",
       "boundary": "docker",
-      "responsibility": "Holds login sessions and the dashboard cache; LLM response caches are planned for CP2/CP3.",
+      "responsibility": "Holds sessions, the dashboard cache and both LLM cache tiers; everything in it can be rebuilt.",
       "tech": "Redis 8.10",
       "holds": [
-        {"data": "Login sessions (sess:{token}, hash)", "lifetime": "8 h TTL, deleted on logout"},
-        {"data": "Dashboard cache (dash:{user_id}, JSON)", "lifetime": "10 min TTL, deleted on writes"}
+        {
+          "data": "Login sessions (sess:{token}, hash)",
+          "lifetime": "8 h TTL, deleted on logout"
+        },
+        {
+          "data": "Dashboard cache (dash:{user_id}, JSON)",
+          "lifetime": "10 min TTL, deleted on writes"
+        },
+        {
+          "data": "Exact LLM cache (llm:exact:{sha256}, JSON)",
+          "lifetime": "7 day TTL"
+        },
+        {
+          "data": "Semantic LLM cache (idx:llm_semantic, vector index)",
+          "lifetime": "7 day TTL per entry"
+        },
+        {
+          "data": "Intake guard routes (idx:intake_guard, vector index)",
+          "lifetime": "Rebuilt at startup"
+        }
       ],
-      "evidence": ["docker-compose.yml", "backend/app/auth.py", "backend/app/services/dashboard.py", "doc:docs/data-model.md#6-redis-key-space"]
+      "evidence": [
+        "docker-compose.yml",
+        "backend/app/auth.py",
+        "backend/app/services/dashboard.py",
+        "backend/agent/cache.py",
+        "backend/agent/semantic.py",
+        "backend/agent/guard.py",
+        "doc:docs/data-model.md#6-redis-key-space"
+      ]
     },
     {
       "id": "anthropic",
       "name": "Anthropic API",
       "kind": "external",
       "boundary": "anthropic-cloud",
-      "responsibility": "Generates structured diagnostic, lesson and grading output for the skills.",
+      "responsibility": "Generates structured probe, map, lesson, quiz, grading and re-plan output for the skills.",
       "tech": "claude-sonnet-5-5 by default",
-      "evidence": ["backend/agent/llm.py", ".env.example"]
+      "evidence": [
+        "backend/agent/llm.py",
+        ".env.example"
+      ]
     }
   ],
   "edges": [
-    {"from": "learner", "to": "web", "label": "uses the app", "kind": "sync", "step": 1},
-    {"from": "web", "to": "api", "label": "proxies /api/*", "kind": "sync", "step": 2},
-    {"from": "api", "to": "agent", "label": "runs skill calls", "kind": "sync", "step": 3},
-    {"from": "agent", "to": "anthropic", "label": "structured-output request", "kind": "sync", "step": 4},
-    {"from": "api", "to": "postgres", "label": "rows and llm_calls log", "kind": "sync"},
-    {"from": "api", "to": "redis", "label": "sessions, dashboard cache", "kind": "sync"}
+    {
+      "from": "learner",
+      "to": "web",
+      "label": "uses the app",
+      "kind": "sync",
+      "step": 1
+    },
+    {
+      "from": "web",
+      "to": "api",
+      "label": "proxies /api/*",
+      "kind": "sync",
+      "step": 2
+    },
+    {
+      "from": "api",
+      "to": "agent",
+      "label": "runs skill calls",
+      "kind": "sync",
+      "step": 3
+    },
+    {
+      "from": "agent",
+      "to": "anthropic",
+      "label": "structured-output request",
+      "kind": "sync",
+      "step": 4
+    },
+    {
+      "from": "api",
+      "to": "postgres",
+      "label": "rows and llm_calls log",
+      "kind": "sync"
+    },
+    {
+      "from": "api",
+      "to": "redis",
+      "label": "sessions, dashboard cache",
+      "kind": "sync"
+    },
+    {
+      "from": "api",
+      "to": "pedagogy",
+      "label": "scores, gates, adapts",
+      "kind": "sync"
+    },
+    {
+      "from": "api",
+      "to": "guard",
+      "label": "screens new courses",
+      "kind": "sync"
+    },
+    {
+      "from": "agent",
+      "to": "cache",
+      "label": "lookup, then store",
+      "kind": "sync"
+    },
+    {
+      "from": "agent",
+      "to": "sources",
+      "label": "grounds and checks",
+      "kind": "sync"
+    },
+    {
+      "from": "cache",
+      "to": "redis",
+      "label": "exact + vector entries",
+      "kind": "sync"
+    },
+    {
+      "from": "guard",
+      "to": "redis",
+      "label": "route vectors",
+      "kind": "sync"
+    }
   ],
   "flows": [
     {
       "id": "course-probe",
       "name": "Generate diagnostic questions",
-      "description": "After a learner creates a course, the API asks the diagnose skill for probe questions and stores them.",
+      "description": "After a learner creates a course, the API asks the diagnose skill for probe questions and stores them. Diagnose is never cached.",
       "steps": [
-        {"from": "learner", "to": "web", "msg": "Submit intake; request diagnostic questions", "kind": "call"},
-        {"from": "web", "to": "api", "msg": "POST /api/courses/{id}/probe with sid cookie", "kind": "call"},
-        {"from": "api", "to": "redis", "msg": "HGETALL sess:{sid}", "kind": "call"},
-        {"from": "redis", "to": "api", "msg": "The session's user", "kind": "return"},
-        {"from": "api", "to": "postgres", "msg": "Load the course; check the user owns it", "kind": "call"},
-        {"from": "api", "to": "agent", "msg": "Run diagnose.probe with the intake", "kind": "call"},
-        {"from": "agent", "to": "anthropic", "msg": "Structured-output request", "kind": "call"},
-        {"from": "anthropic", "to": "agent", "msg": "JSON reply; Pydantic-validated, one retry", "kind": "return"},
-        {"from": "agent", "to": "api", "msg": "Validated ProbeOutput", "kind": "return"},
-        {"from": "api", "to": "postgres", "msg": "Save the assessment; log the call", "kind": "call"},
-        {"from": "api", "to": "web", "msg": "Course detail with the questions", "kind": "return"}
+        {
+          "from": "learner",
+          "to": "web",
+          "msg": "Submit intake; request diagnostic questions",
+          "kind": "call"
+        },
+        {
+          "from": "web",
+          "to": "api",
+          "msg": "POST /api/courses/{id}/probe with sid cookie",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "redis",
+          "msg": "HGETALL sess:{sid}",
+          "kind": "call"
+        },
+        {
+          "from": "redis",
+          "to": "api",
+          "msg": "The session's user",
+          "kind": "return"
+        },
+        {
+          "from": "api",
+          "to": "postgres",
+          "msg": "Load the course; check the user owns it",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "agent",
+          "msg": "Run diagnose.probe with the intake",
+          "kind": "call"
+        },
+        {
+          "from": "agent",
+          "to": "anthropic",
+          "msg": "Structured-output request",
+          "kind": "call"
+        },
+        {
+          "from": "anthropic",
+          "to": "agent",
+          "msg": "JSON reply; Pydantic-validated, one retry",
+          "kind": "return"
+        },
+        {
+          "from": "agent",
+          "to": "api",
+          "msg": "Validated ProbeOutput",
+          "kind": "return"
+        },
+        {
+          "from": "api",
+          "to": "postgres",
+          "msg": "Save the assessment; log the call",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "web",
+          "msg": "Course detail with the questions",
+          "kind": "return"
+        }
+      ]
+    },
+    {
+      "id": "open-lesson",
+      "name": "Open a concept's lesson",
+      "description": "The unlock gate runs first. A stored lesson opens instantly; otherwise the lesson is served from the exact or semantic cache, or generated and streamed.",
+      "steps": [
+        {
+          "from": "learner",
+          "to": "web",
+          "msg": "Open a concept (lesson stream)",
+          "kind": "call"
+        },
+        {
+          "from": "web",
+          "to": "api",
+          "msg": "POST .../lesson (SSE) via the proxy",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "postgres",
+          "msg": "Load plan, progress, any stored lesson",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "pedagogy",
+          "msg": "Unlocked? Prerequisites at least solid",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "agent",
+          "msg": "Run teach-concept.teach",
+          "kind": "call"
+        },
+        {
+          "from": "agent",
+          "to": "cache",
+          "msg": "Exact key, then semantic match",
+          "kind": "call"
+        },
+        {
+          "from": "cache",
+          "to": "redis",
+          "msg": "JSON.GET, then vector search with tag filter",
+          "kind": "call"
+        },
+        {
+          "from": "agent",
+          "to": "anthropic",
+          "msg": "On a miss: stream structured output",
+          "kind": "call"
+        },
+        {
+          "from": "agent",
+          "to": "cache",
+          "msg": "Store the lesson in both tiers",
+          "kind": "call"
+        },
+        {
+          "from": "agent",
+          "to": "postgres",
+          "msg": "llm_calls row: tokens, latency, cache result",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "web",
+          "msg": "SSE field deltas, then done",
+          "kind": "return"
+        }
+      ]
+    },
+    {
+      "id": "submit-quiz",
+      "name": "Grade a quiz and adapt the plan",
+      "description": "Grading is never cached. Code scores, sets mastery and the review date, and decides whether the plan changes; a skill only writes the words.",
+      "steps": [
+        {
+          "from": "learner",
+          "to": "web",
+          "msg": "Submit quiz answers",
+          "kind": "call"
+        },
+        {
+          "from": "web",
+          "to": "api",
+          "msg": "POST .../quiz-attempts/{id}/submit",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "pedagogy",
+          "msg": "Score the multiple-choice answers",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "agent",
+          "msg": "Run grade on the short answer",
+          "kind": "call"
+        },
+        {
+          "from": "agent",
+          "to": "anthropic",
+          "msg": "Structured-output request",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "pedagogy",
+          "msg": "Combine, mastery, band, FSRS date, rule",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "agent",
+          "msg": "If re-planning: remediate.explain_change",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "postgres",
+          "msg": "Progress, misconception, plan version N+1",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "redis",
+          "msg": "DEL dash:{user_id}",
+          "kind": "call"
+        },
+        {
+          "from": "api",
+          "to": "web",
+          "msg": "Score, feedback, band, what happens next",
+          "kind": "return"
+        }
       ]
     }
   ],
