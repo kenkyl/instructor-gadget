@@ -25,6 +25,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP4 | J3: org course grounded in docs | ✅ merged (PR #6) |
 | CP5 | Dashboard + eval harness | ✅ merged (PR #7) |
 | CP6 | Hardening + sample data, docs, tag `v0.1.0` | ✅ merged (PR #8), tagged `v0.1.0` |
+| After `v0.1.0` | Docs only: the generated architecture overview refreshed to v0.1.0 and embedded (collapsed) in the README; status refresh | ✅ merged (PR #9, PR #10) |
 
 ## CP1: J1, create a course
 **Before starting:**
