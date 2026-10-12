@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP4 ✅ merged (PR #6). **CP5 ✅ built** (dashboard + `make evals`) on branch `cp5/dashboard-evals`, PR #7 ready for review: PC5.1 ✅, PC5.2 ✅. **CP6 in progress** on `cp6/hardening`, stacked on CP5 (draft PR based on `cp5/dashboard-evals`; rebase-free: after CP5 merges, retarget it to `main` and merge `origin/main` in). Next: PC6.1 (sample data, `make warm-cache`, `make reset`).
+> **Current status:** CP5 ✅ built, PR #7 ready for review (`cp5/dashboard-evals`). **CP6 in progress** (hardening, sample data, docs) on `cp6/hardening`, stacked on CP5: its draft PR targets `cp5/dashboard-evals` until PR #7 merges, then gets retargeted to `main` with `origin/main` merged in (no rebase). Next: PC6.1 (sample data, `make warm-cache`, `make reset`). Tag `v0.1.0` only after both PRs merge.
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
