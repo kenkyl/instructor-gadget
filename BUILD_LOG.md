@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP2 ✅ complete (PC2.1–PC2.6: lessons, quiz, grading, adaptation, gate, test-out; ADR-0018–0022). PR #3 (`cp2/learn-check-adapt`) is ready for Kyle's review and merge. Next: **CP3 / PC3.1** (RedisVL semantic cache) on a new branch `cp3/redis-deep-dive` after the merge.
+> **Current status:** CP3 started (Redis deep dive: semantic cache, trace, cache impact). Next: **PC3.1** (RedisVL `SemanticCache` with filter buckets + local MiniLM vectorizer) on branch `cp3/redis-deep-dive` (draft PR, see build plan).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
