@@ -5,7 +5,7 @@ This is the product and engineering brief for Phase 1. How the instructor teache
 test-out on a 4, org-course templates, stack choices) are recorded in [`decisions.md`](decisions.md),
 and the full product vision lives in [`roadmap.md`](roadmap.md).
 
-**Sample org:** a fictional engineering org, "Acme Payments", needs to ramp new engineers onto
+**Sample org:** a fictional engineering org, "Acme AI", needs to ramp new engineers onto
 on-call faster, using courses grounded in its own runbooks and postmortems. The sample course topic is
 incident investigation and on-call fundamentals.
 
@@ -90,7 +90,7 @@ This brief covers *what to build and when*. The spec covers *how the instructor 
 - Mastery and due dates update in the database.
 
 ### J3: Org course grounded in internal docs
-1. Org admin (seeded) creates an org course, e.g. "On-call readiness at Acme Payments", and uploads or selects Acme's internal docs.
+1. Org admin (seeded) creates an org course, e.g. "Technical readiness at Acme AI", and uploads or selects Acme's internal docs.
 2. The same J1 flow runs, but the concept map, lessons, and quizzes are **grounded in the docs**. (spec §5) Lessons cite the doc and section they draw from. If something isn't in the docs, the instructor says so instead of inventing it.
 3. Admin assigns the course to a learner, and it appears on that learner's dashboard as an org course.
 
@@ -223,17 +223,17 @@ Intake defaults can be static in P1; a `suggest-defaults` call is optional.
 
 ## 7. Seed and sample data
 
-- **Org:** "Acme Payments" (fictional). Write 4 short, realistic internal docs:
+- **Org:** "Acme AI" (fictional). Write 4 short, realistic internal docs:
   1. On-call runbook
-  2. Service map: `checkout-api`, `payments-svc`, Postgres, Redis, Kafka, on Kubernetes
-  3. A postmortem: connection-pool exhaustion in `payments-svc` causing checkout 5xx during a traffic spike
+  2. Service map: `inference-gateway`, `model-router`, Postgres, Redis, Kafka, on Kubernetes
+  3. A postmortem: connection-pool exhaustion in `model-router` causing inference 5xx during a traffic spike
   4. Escalation policy
-- **Users:** `kyle` (individual learner), `dana` (new SRE at Acme, learner), `priya` (Acme eng manager, org admin).
+- **Users:** `kyle` (individual learner), `dana` (new backend engineer at Acme AI, learner), `priya` (Acme AI eng manager, org admin).
 - **Pre-seeded learner state, so a fresh install shows a course mid-flight without waiting on the LLM:**
   - kyle: "Incident investigation fundamentals for on-call engineers", about 40% complete, with plan v1 → v2 history already present. It has a mix of mastery bands (two solid, one shaky with a logged misconception such as "thinks a liveness-probe failure removes the pod from the load balancer", one locked behind it, one due for review).
   - kyle: one completed course with a badge
-  - dana: an assigned Acme org course
-- **One seeded interactive prototype** (spec §4.5 bar: the learner can change something and be surprised): a **connection-pool exhaustion simulator** for the Acme postmortem concept. It has sliders for request rate, pool size, and query latency, plus live counters for queue wait, timeouts, and 5xx rate. The surprise: the system looks fine until utilization crosses a threshold, then latency explodes. Build it once during development, check it by hand, and store it as the concept's `prototype_html`.
+  - dana: an assigned Acme AI org course
+- **One seeded interactive prototype** (spec §4.5 bar: the learner can change something and be surprised): a **connection-pool exhaustion simulator** for the Acme AI postmortem concept. It has sliders for request rate, pool size, and query latency, plus live counters for queue wait, timeouts, and 5xx rate. The surprise: the system looks fine until utilization crosses a threshold, then latency explodes. Build it once during development, check it by hand, and store it as the concept's `prototype_html`.
 - `make seed`, `make warm-cache` (pre-generate and cache lessons for the seeded courses), `make reset`.
 
 ## 8. Project docs (in `docs/`)

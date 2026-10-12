@@ -18,8 +18,8 @@ ORGS = [{"slug": "acme", "name": "Acme AI"}]
 
 USERS = [
     {"username": "kyle", "display_name": "Kyle (individual learner)"},
-    {"username": "dana", "display_name": "Dana (new SRE at Acme)"},
-    {"username": "priya", "display_name": "Priya (Acme eng manager)"},
+    {"username": "dana", "display_name": "Dana (new backend engineer at Acme AI)"},
+    {"username": "priya", "display_name": "Priya (Acme AI eng manager)"},
 ]
 
 MEMBERSHIPS = [  # (username, org slug, role)

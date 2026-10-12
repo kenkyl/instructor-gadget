@@ -130,7 +130,7 @@ export default function NewCoursePage() {
             <Field label="Why? What do you want to be able to do?" htmlFor="goal" hint="Optional">
               <Input
                 id="goal"
-                placeholder="e.g. Design the cache layer for our checkout service"
+                placeholder="e.g. Design the cache layer for our inference gateway"
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
               />

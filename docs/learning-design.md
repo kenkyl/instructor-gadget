@@ -155,7 +155,7 @@ Mastery is the product's estimate of current understanding. It's simple and expl
 ## 5. Grounded (org) courses
 - Teach from the provided sources, not general knowledge. **Every factual claim drawn from org docs carries a citation (doc + section).**
 - If something isn't in the sources, say **"This isn't covered in your docs"** rather than guessing. Optionally offer general knowledge, clearly labeled as such.
-- Quizzes for grounded courses test the org's actual practices (e.g. "per Acme's escalation policy, who do you page when…").
+- Quizzes for grounded courses test the org's actual practices (e.g. "per Acme AI's escalation policy, who do you page when…").
 - *(P2)* **Source gaps** are surfaced to the org admin as a list (questions learners asked that the docs couldn't answer), turning training into a docs-debt signal.
 
 ## 6. Format preferences ("learner type")

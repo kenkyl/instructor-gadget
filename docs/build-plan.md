@@ -60,7 +60,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 ## CP4: J3, org course grounded in docs
 | PC | Build |
 |---|---|
-| PC4.1 | The 4 Acme docs; `org_docs` with section anchors; upload/select |
+| PC4.1 | The 4 Acme AI docs; `org_docs` with section anchors; upload/select |
 | PC4.2 | `ground-in-sources` (a modifier skill): citations on every claim, and "This isn't covered in your docs" |
 | PC4.3 | Admin template flow (ADR-0004), then assign to dana |
 

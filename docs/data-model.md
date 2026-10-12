@@ -325,7 +325,7 @@ A person who can log in. Phase 1 has seeded users only; Google sign-in is planne
 | Read | Login (🔜 PC0.5), `get_current_user` on every request (resolved from the session) | By id or username |
 
 ```json
-{ "id": "2b7e…b002", "username": "dana", "display_name": "Dana (new SRE at Acme)" }
+{ "id": "2b7e…b002", "username": "dana", "display_name": "Dana (new backend engineer at Acme AI)" }
 ```
 
 #### `memberships` ✅
@@ -607,7 +607,7 @@ Generated lesson content for one concept in one enrollment, stored **surface-neu
 ```json
 { "concept_id": "liveness-vs-readiness", "kind": "core", "cache_result": "semantic_hit",
   "content": { "explanation_md": "Counterintuitive part first: a failing **readiness** probe never restarts anything…",
-               "example_md": "During Acme's checkout deploy…",
+               "example_md": "During Acme AI's inference-gateway deploy…",
                "diagram_mermaid": "flowchart LR\n  P[Pod] -->|readiness fails| S[Removed from Service]\n  P -->|liveness fails| R[Container restarted]",
                "citations": [{ "doc": "on-call-runbook", "section": "health-checks" }], "not_in_docs": [] } }
 ```
@@ -660,7 +660,7 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 
 | Operation | When | How |
 |---|---|---|
-| Write | Seed (the 4 Acme docs) or admin upload (🔜 PC4.1) | Insert; sections and hash computed on write |
+| Write | Seed (the 4 Acme AI docs) or admin upload (🔜 PC4.1) | Insert; sections and hash computed on write |
 | Read | Grounded generation (the `ground-in-sources` skill composes them into prompts); citation checks in evals | By `course.doc_ids` |
 
 ```json
@@ -817,7 +817,7 @@ Redis holds **nothing that can't be rebuilt**. Every key has a TTL or an explici
 |---|---|
 | `user_id` | `2b7e…b002` |
 | `username` | `dana` |
-| `display_name` | `Dana (new SRE at Acme)` |
+| `display_name` | `Dana (new backend engineer at Acme AI)` |
 | `created_at` | `2026-10-11T09:00:00Z` |
 
 - **Writes are atomic:** `HSET` and `EXPIRE` run in one `MULTI/EXEC` pipeline, so a session never exists without its TTL. The same applies to `JSON.SET` + `EXPIRE` for the dashboard.

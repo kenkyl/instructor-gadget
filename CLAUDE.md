@@ -60,7 +60,7 @@ Filled in as they come to exist (PC0.2+).
 | `make install` | Install backend (uv) + web (npm) dependencies |
 | `make migrate` | Apply Alembic migrations to the dev DB |
 | `make migration m="..."` | Autogenerate a migration after changing `app/models.py`; always review the generated file |
-| `make seed` | Seed the sample org (Acme) + users kyle, dana, priya (idempotent) |
+| `make seed` | Seed the sample org (Acme AI) + users kyle, dana, priya (idempotent) |
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
 | `make lint` / `make fmt` | ruff + pyright + eslint + tsc / auto-format backend |
