@@ -9,9 +9,9 @@
     "scope": ".",
     "detail": "container",
     "readme": {
-      "embed": false,
+      "embed": true,
       "path": "README.md",
-      "placement": "after-intro"
+      "placement": "after:Architecture"
     },
     "notes": [
       {
@@ -19,7 +19,7 @@
         "added": "2026-10-11"
       },
       {
-        "text": "output to docs/architecture; keep consistent with docs/architecture.md (current hand-written doc); regenerate from the current code (v0.1.0). Do not modify README.md yet: the README embed decision is the user's.",
+        "text": "output to docs/architecture; keep consistent with docs/architecture.md (the hand-written doc); regenerate from the current code. README keeps its hand-written diagram and embeds this overview collapsed beneath it.",
         "added": "2026-10-12"
       }
     ]
