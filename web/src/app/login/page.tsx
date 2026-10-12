@@ -23,6 +23,9 @@ export default function LoginPage() {
     setBusy(username);
     try {
       await apiPost("/auth/login", { username });
+      // Reset before navigating: Next 16 keeps this page alive (hidden) after replace, so after
+      // a logout it comes back exactly as left, still "Signing in…" for the last user.
+      setBusy(null);
       router.replace("/");
     } catch (e) {
       setError((e as Error).message);
