@@ -135,6 +135,6 @@ Phase tags: **[P1]** MVP · **[P1+]** only if time allows after CP6 · **[P2]** 
 ## Claude Code skills for this build (create at CP0, in `.claude/skills/`)
 - **`checkpoint`:** run smoke checks and `make evals` (when it exists), append a `BUILD_LOG.md` entry (what was built, key prompts/decisions, where the AI went wrong, tradeoffs), and commit with a clear message.
 - **`new-instructor-skill`:** scaffold a product skill folder (`backend/agent/skills/<name>/` with `SKILL.md`, `schema.py`, `references/`, `evals/`) in the standard shape and register it. Use it for every product skill, so they all follow one pattern.
-- **`reset-sample-data`** (create at CP6): reset the DB, seed sample data, warm the caches (`make reset`).
+- **`reset-sample-data`** (✅ CP6): reset the DB, seed sample data, warm the caches (`make reset`, `make warm-cache`).
 
 These are our own skills. Don't vendor or install any third-party skill into this repo. Also added: `adr` (append a numbered decision to `decisions.md`).

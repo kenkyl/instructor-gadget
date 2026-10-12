@@ -24,7 +24,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ merged (PR #4) |
 | CP4 | J3: org course grounded in docs | ✅ merged (PR #6) |
 | CP5 | Dashboard + eval harness | ✅ merged (PR #7) |
-| CP6 | Hardening + sample data, docs, tag `v0.1.0` | ✅ built, PR #8 ready for review (branch `cp6/hardening`): PC6.1 ✅, PC6.2 ✅, PC6.3 ✅; tag after both merge |
+| CP6 | Hardening + sample data, docs, tag `v0.1.0` | ✅ merged (PR #8), tagged `v0.1.0` |
 
 ## CP1: J1, create a course
 **Before starting:**
@@ -76,9 +76,9 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 |---|---|
 | PC6.1 | Sample learner state (kyle's course ~40% done with plan v1→v2), `make warm-cache`, `make reset` + `reset-sample-data` skill. ✅ Built through the real services; reset never flushes; warm-cache stores kyle's lessons and caches dana's |
 | PC6.2 | `architecture.md`, `walkthrough.md`, `overview.md`, `ai-workflow.md`, README. ✅ |
-| PC6.3 | Full run-through from `make reset`, then tag `v0.1.0`. ✅ Run-through done (live J1–J3); tag after merges |
+| PC6.3 | Full run-through from `make reset`, then tag `v0.1.0`. ✅ Run-through done (live J1–J3); `v0.1.0` tagged |
 
-## P1+ (only after CP6, in order)
+## P1+ (only after CP6, in order; Phase 1 shipped as `v0.1.0`)
 1. **Outside knowledge in org courses** (designed, not built; see below)
 2. Live LLM-generated prototypes (sandboxed)
 3. Thin MCP surface: learn from Claude Code (`next_concept`, `get_lesson`, `submit_quiz`)
