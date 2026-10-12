@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install models up down nuke doctor logs psql redis-cli migrate migration seed api web dev test evals eval-cache eval-grounding lint fmt types
+.PHONY: help install models up down nuke doctor logs psql redis-cli migrate migration seed reset warm-cache api web dev test evals eval-cache eval-grounding lint fmt types
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -44,6 +44,12 @@ migration: ## Autogenerate a migration from model changes: make migration m="add
 
 seed: ## Seed the sample org and users (idempotent)
 	cd backend && uv run python -m seed.seed
+
+reset: migrate ## Wipe app data (not the LLM caches or indexes), re-seed, load the sample learner state
+	cd backend && uv run python -m seed.reset
+
+warm-cache: ## Live: pre-generate the sample courses' lessons (~$0.50 first run, little after; needs ANTHROPIC_API_KEY)
+	cd backend && uv run python -m seed.warm_cache
 
 # --- app processes (native, hot reload) --------------------------------------
 api: ## Run FastAPI on :8000; reloads on .py AND skill prompt (.md/.yaml) edits

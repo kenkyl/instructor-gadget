@@ -25,9 +25,12 @@ answers:
   - id: a1-wrong
     answer: "Connections are cheap these days, so the teammate is right. More threads means more throughput."
     label: score_1
+  # Relabelled 2026-10-12 after the first `make evals` (labels follow the rubric above):
+  # a2 2→1: right for the wrong reason is a 1 (§4.7). a5, a6 3→2: both explain setup cost and
+  # reuse well but never say what goes wrong with 5,000 connections, which score_2 names.
   - id: a2-right-wrong-reason
     answer: "Reusing connections helps because closing a connection makes the database flush its cache, so queries get slower."
-    label: score_2
+    label: score_1
   - id: a3-partial
     answer: "Opening a connection takes a while, so reusing them is faster. 5,000 threads seems like a lot."
     label: score_2
@@ -36,10 +39,10 @@ answers:
     label: score_2
   - id: a5-restatement
     answer: "Opening a connection involves a TCP handshake, TLS negotiation, authentication and the server starting a backend for it. A pool opens a fixed set once and lends them out, so each request skips that cost."
-    label: score_3
+    label: score_2
   - id: a6-restatement-fluent
     answer: "Connection setup is expensive: network round trips, encryption, auth, and per-connection server memory. Pooling amortizes that by keeping warm connections and reusing them, and it caps how many the database has to serve."
-    label: score_3
+    label: score_2
   - id: a7-transfer
     answer: "About 25 of every 26 ms is setup (handshake, TLS, auth, a server backend), so per-record connections waste ~96% of the time. A pool of ~10–20 pays setup once. 5,000 threads would blow past max_connections (errors), and below the limit thousands of backends fight for a few cores and locks, so throughput drops. Queue the records behind a small pool."
     label: score_4

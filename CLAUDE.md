@@ -62,6 +62,8 @@ Filled in as they come to exist (PC0.2+).
 | `make migrate` | Apply Alembic migrations to the dev DB |
 | `make migration m="..."` | Autogenerate a migration after changing `app/models.py`; always review the generated file |
 | `make seed` | Seed the sample org (Acme AI) + users kyle, dana, priya (idempotent) |
+| `make reset` | Wipe app data (keeps LLM caches and indexes), re-seed, load the sample learner state (`reset-sample-data` skill) |
+| `make warm-cache` | Live: pre-generate the sample courses' lessons (~$0.20 first run, ~$0.02 after a reset) |
 | `make dev` | Run FastAPI (:8000) + Next.js (:3000) together; or `make api` / `make web` |
 | `make test` | Backend pytest (needs `make up`) |
 | `make evals` | Live mini eval harness: diagnosis personas, map constraints, pedagogy, grader calibration, grounding judge, cache false hits (~$0.60, ADR-0031; results in `backend/evals/results/`) |
