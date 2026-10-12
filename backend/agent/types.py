@@ -474,3 +474,42 @@ class RemediationLessonInput(BaseModel):
     concept: Concept  # the remediation concept; `remedy` names the angle and the belief
     original_concept_title: str
     original_explanation: str | None
+
+
+# --- evals: the grounding judge (CP5, ADR-0031) -------------------------------------------------
+ClaimVerdict = Literal[
+    "cited_supported",  # has a [n] marker and the cited section says it
+    "cited_unsupported",  # has a marker, but the cited section doesn't say it
+    "uncited_from_docs",  # true per the docs, but no marker
+    "general_knowledge",  # not about the org; fine as background
+    "invented_org_detail",  # an org-specific fact, number, team or step the docs never give
+]
+
+
+class JudgeInput(BaseModel):
+    """judge-grounding.judge input: eval-only, never served to a learner."""
+
+    kind: Literal["lesson", "map"]
+    docs_md: str  # the composed docs, sections tagged with their anchors (sources.compose)
+    artifact_md: str  # the lesson (with its numbered citations) or the map, rendered as text
+    assertions: list[str]  # the case's checks that only a reader can make
+
+
+class JudgedClaim(BaseModel):
+    claim: str = Field(description="One factual claim, quoted or closely paraphrased")
+    verdict: ClaimVerdict
+    note: str = Field(description="Why, in one sentence; name the doc section when relevant")
+
+
+class JudgedAssertion(BaseModel):
+    assertion: str = Field(description="The assertion, copied verbatim from the input")
+    passed: bool
+    reason: str = Field(description="One or two sentences of evidence from the artifact")
+
+
+class JudgeOutput(BaseModel):
+    claims: list[JudgedClaim] = Field(description="Every factual claim about the org")
+    assertions: list[JudgedAssertion]
+
+    def count(self, verdict: ClaimVerdict) -> int:
+        return sum(c.verdict == verdict for c in self.claims)

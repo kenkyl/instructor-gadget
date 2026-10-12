@@ -94,7 +94,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - **Map:** `Concept.basis: docs | general` (default `docs`). The template map may add concepts the docs assume or the goal's best practice requires, marked `general`. **Code enforces the cap** (≤30% of the map, at most 3 of 12), and the admin can already remove any concept.
 - **Cite rules:** a lesson or quiz for a `general` concept needs no citation or gap (it still cites any doc that touches it).
 - **Web:** a "Beyond your docs" section in the lesson, labelled "General knowledge, not from your docs"; a "General knowledge" badge on the template map.
-- **Eval and docs:** three `make eval-grounding` cases (best-practice note on a covered concept; a general-basis concept; a doc-vs-practice conflict where the docs win), validator and cap tests, ADR-0031 amending ADR-0029, `data-model.md` for the two JSONB shape changes, `make types`. About one PC; ~$0.20 live.
+- **Eval and docs:** three `make eval-grounding` cases (best-practice note on a covered concept; a general-basis concept; a doc-vs-practice conflict where the docs win), validator and cap tests, ADR-0032 amending ADR-0029, `data-model.md` for the two JSONB shape changes, `make types`. About one PC; ~$0.20 live.
 - **Not part of it:** live web search for supplementary facts. It adds cost, latency and a new capability, and compatibility with structured outputs is unverified. Evaluate separately, with Kyle's OK.
 
 ## Known follow-ups

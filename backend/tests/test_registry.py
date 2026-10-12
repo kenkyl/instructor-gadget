@@ -24,6 +24,16 @@ def test_diagnose_loads() -> None:
     assert re.fullmatch(r"diagnose@\d+\.\d+\.\d+\+[0-9a-f]{8}", version)
 
 
+def test_judge_grounding_loads() -> None:
+    reg = Registry()
+    judge = reg.call("judge-grounding", "judge")
+    assert judge.spec.cache == "never"  # every eval run judges afresh
+    assert judge.output_model.__name__ == "JudgeOutput"
+    version = reg.prompt_version("judge-grounding", "judge")
+    print(f"\njudge-grounding.judge prompt_version = {version}")
+    assert re.fullmatch(r"judge-grounding@\d+\.\d+\.\d+\+[0-9a-f]{8}", version)
+
+
 def test_map_concepts_loads() -> None:
     from agent.types import MapInput, MapOutput
 
