@@ -260,6 +260,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Orgs
+         * @description The orgs the caller belongs to, with their role (who may upload docs and build courses).
+         */
+        get: operations["my_orgs_api_orgs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org_slug}/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Docs */
+        get: operations["list_docs_api_orgs__org_slug__docs_get"];
+        put?: never;
+        /**
+         * Upload Doc
+         * @description Add a doc (admins only). Uploading the same doc again returns it with a 200.
+         */
+        post: operations["upload_doc_api_orgs__org_slug__docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org_slug}/docs/{doc_slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Doc */
+        get: operations["get_doc_api_orgs__org_slug__docs__doc_slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enrollments/{enrollment_id}": {
         parameters: {
             query?: never;
@@ -645,6 +703,9 @@ export interface components {
             id: string;
             /** Title */
             title: string;
+            scope: components["schemas"]["CourseScope"];
+            /** Org Name */
+            org_name?: string | null;
             status: components["schemas"]["CourseStatus"];
             config: components["schemas"]["CourseConfig"];
             mission: components["schemas"]["Mission"];
@@ -658,6 +719,22 @@ export interface components {
             concept_map?: components["schemas"]["ConceptMap"] | null;
             /** Enrollment Id */
             enrollment_id?: string | null;
+            /** Docs */
+            docs?: components["schemas"]["CourseDocRef"][];
+            /** Doc Set Hash */
+            doc_set_hash?: string | null;
+        };
+        /**
+         * CourseDocRef
+         * @description A doc a course is grounded in, as the course page lists it.
+         */
+        CourseDocRef: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Section Count */
+            section_count: number;
         };
         /**
          * CourseIntake
@@ -666,7 +743,16 @@ export interface components {
         CourseIntake: {
             config: components["schemas"]["CourseConfig"];
             mission: components["schemas"]["Mission"];
+            /** Org Slug */
+            org_slug?: string | null;
+            /** Doc Slugs */
+            doc_slugs?: string[];
         };
+        /**
+         * CourseScope
+         * @enum {string}
+         */
+        CourseScope: "personal" | "org";
         /**
          * CourseStatus
          * @enum {string}
@@ -734,6 +820,16 @@ export interface components {
              * @enum {string}
              */
             served_from: "cache" | "db";
+        };
+        /**
+         * DocSection
+         * @description One citable section of a doc: stored in `org_docs.sections` (JSONB).
+         */
+        DocSection: {
+            /** Anchor */
+            anchor: string;
+            /** Heading */
+            heading: string;
         };
         /** EnrollmentDetail */
         EnrollmentDetail: {
@@ -909,6 +1005,66 @@ export interface components {
             deadline?: string | null;
             /** Analogy Domain */
             analogy_domain?: string | null;
+        };
+        /** OrgDocDetail */
+        OrgDocDetail: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Section Count */
+            section_count: number;
+            /** Chars */
+            chars: number;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Content Md */
+            content_md: string;
+            /** Sections */
+            sections: components["schemas"]["DocSection"][];
+        };
+        /** OrgDocIn */
+        OrgDocIn: {
+            /** Title */
+            title: string;
+            /** Content Md */
+            content_md: string;
+            /**
+             * Slug
+             * @description Defaults to one made from the title
+             */
+            slug?: string | null;
+        };
+        /** OrgDocSummary */
+        OrgDocSummary: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Section Count */
+            section_count: number;
+            /** Chars */
+            chars: number;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** OrgMembershipOut */
+        OrgMembershipOut: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            role: components["schemas"]["Role"];
         };
         /** OverrideRequest */
         OverrideRequest: {
@@ -1130,6 +1286,11 @@ export interface components {
             angle: string;
             misconception: components["schemas"]["Misbelief"] | null;
         };
+        /**
+         * Role
+         * @enum {string}
+         */
+        Role: "member" | "admin";
         /**
          * Rule
          * @description Which rule fired after a graded attempt. Stored in plan_versions.rule when it changes the
@@ -1675,6 +1836,141 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_orgs_api_orgs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgMembershipOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_docs_api_orgs__org_slug__docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDocSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_doc_api_orgs__org_slug__docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgDocIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDocDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_doc_api_orgs__org_slug__docs__doc_slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_slug: string;
+                doc_slug: string;
+            };
+            cookie?: {
+                sid?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDocDetail"];
                 };
             };
             /** @description Validation Error */

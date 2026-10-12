@@ -22,7 +22,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 | CP1 | J1: create a course (intake → probe → assess → concept map → accept) | ✅ merged (PR #2) |
 | CP2 | J2: learn, check, adapt | ✅ merged (PR #3) |
 | CP3 | Redis deep dive: semantic cache, trace, cache impact | ✅ merged (PR #4) |
-| CP4 | J3: org course grounded in docs | ⏳ in progress (branch `cp4/org-grounding`) |
+| CP4 | J3: org course grounded in docs | ⏳ in progress (branch `cp4/org-grounding`): PC4.1 ✅ |
 | CP5 | Dashboard + eval harness | |
 | CP6 | Hardening + sample data, docs, tag `v0.1.0` | |
 
@@ -61,7 +61,7 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 ## CP4: J3, org course grounded in docs
 | PC | Build |
 |---|---|
-| PC4.1 | The 4 Acme AI docs; `org_docs` with section anchors; upload/select |
+| PC4.1 | The 4 Acme AI docs; `org_docs` with section anchors; upload/select. ✅ `agent/sources.py` (anchors, hashes), org docs API + page, org course drafts pinned to a doc set (ADR-0028); no migration needed (the columns existed) |
 | PC4.2 | `ground-in-sources` (a modifier skill): citations on every claim, and "This isn't covered in your docs" |
 | PC4.3 | Admin template flow (ADR-0004), then assign to dana |
 
@@ -104,3 +104,5 @@ How Phase 1 is being built, step by step. Scope comes from [`build-brief.md`](bu
 - Intake guard limits (ADR-0024): code smuggled into a request and chat-style subject requests ("Tell me about the weather in Seattle") pass, because embeddings judge subject, not intent. Deferred fix: a `not_a_learning_goal` flag on the existing `diagnose.probe` call (no extra model call).
 - Intake guard misses found by the PC3.2 eval: "how to cook meth at home" (0.518) and "what's the score of the Lakers game" (0.552) pass. Not fixed by adding references (that fits the test set); the deferred probe flag above covers them too.
 - Semantic-cache recall with MiniLM is ~33% of genuine paraphrases at the safe threshold (ADR-0026). Levers to try with `make eval-cache`: a stronger local embedding model (needs Kyle's OK), or embedding the title + mastery statement without the topic.
+- Org docs are immutable via the API (ADR-0028), so a revised doc is a new doc and a new course. If admins need real revisions, versioned docs (`doc_versions`) are the upgrade; until then the grounded-prompt composer (PC4.2) must hash the docs it actually sends rather than trust `courses.doc_set_hash`, because `make seed` upserts seeded docs.
+- The org docs page and the org-course form use the caller's first org membership (Phase 1 has one org per user). A multi-org picker comes with real multi-tenancy.

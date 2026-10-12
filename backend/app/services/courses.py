@@ -13,7 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent import pedagogy, plan
+from agent import pedagogy, plan, sources
 from agent.llm import CallContext, LLMClient
 from agent.skills.diagnose.schema import (
     AssessInput,
@@ -33,9 +33,14 @@ from app.models import (
     CourseStatus,
     Enrollment,
     EnrollmentSource,
+    Membership,
+    Org,
+    OrgDoc,
     PlanTrigger,
     PlanVersion,
+    Role,
 )
+from app.services import org_docs
 from app.services.dashboard import invalidate_dashboard
 
 
@@ -44,6 +49,18 @@ class CourseIntake(BaseModel):
 
     config: CourseConfig
     mission: Mission
+    # An org course (admins only) is built as a template and grounded in the org's docs
+    # (ADR-0004, ADR-0028). Absent, it's a personal course.
+    org_slug: str | None = None
+    doc_slugs: list[str] = Field(default_factory=list, max_length=20)
+
+
+class CourseDocRef(BaseModel):
+    """A doc a course is grounded in, as the course page lists it."""
+
+    slug: str
+    title: str
+    section_count: int
 
 
 class ProbeQuestionView(BaseModel):
@@ -63,6 +80,8 @@ class AnswersIn(BaseModel):
 class CourseDetail(BaseModel):
     id: uuid.UUID
     title: str
+    scope: CourseScope
+    org_name: str | None = None  # org courses only
     status: CourseStatus
     config: CourseConfig
     mission: Mission
@@ -73,18 +92,34 @@ class CourseDetail(BaseModel):
     assessment: AssessOutput | None = None
     concept_map: ConceptMap | None = None  # proposed while `mapped`; final once `active`
     enrollment_id: uuid.UUID | None = None  # set once the learner accepts the map
+    # Org courses: the docs it is grounded in (in the order chosen) and their set hash, which
+    # is part of the semantic-cache bucket (ADR-0007).
+    docs: list[CourseDocRef] = Field(default_factory=list)
+    doc_set_hash: str | None = None
 
 
 async def create_course(db: AsyncSession, user: CurrentUser, intake: CourseIntake) -> Course:
     course = Course(
-        scope=CourseScope.personal,
-        owner_user_id=user.id,
         created_by=user.id,
         title=intake.config.topic,
         config=intake.config.model_dump(mode="json"),
         mission=intake.mission.model_dump(mode="json"),
         status=CourseStatus.draft,
     )
+    if intake.org_slug is None:
+        if intake.doc_slugs:
+            raise HTTPException(422, "Docs can only ground an org course.")
+        course.scope = CourseScope.personal
+        course.owner_user_id = user.id
+    else:
+        org, role = await org_docs.member_org(db, user, intake.org_slug)
+        org_docs.require_admin(role)
+        docs = await org_docs.resolve_doc_set(db, org.id, intake.doc_slugs)
+        course.scope = CourseScope.org
+        course.org_id = org.id
+        course.doc_ids = [str(d.id) for d in docs]
+        # Pinned now: docs are immutable (ADR-0028), so the set can't drift under the course.
+        course.doc_set_hash = sources.doc_set_hash((d.slug, d.content_hash) for d in docs)
     db.add(course)
     await db.commit()
     # No dashboard invalidation: the dashboard lists enrollments, and none exists until the
@@ -93,11 +128,40 @@ async def create_course(db: AsyncSession, user: CurrentUser, intake: CourseIntak
 
 
 async def get_owned_course(db: AsyncSession, user: CurrentUser, course_id: uuid.UUID) -> Course:
+    """A personal course's owner, or an admin of the org that owns an org course (learners reach
+    an org course through their enrollment, not through this)."""
     course = await db.get(Course, course_id)
+    allowed = False
+    if course is not None:
+        if course.scope == CourseScope.org:
+            allowed = (
+                await db.scalar(
+                    select(Membership.role).where(
+                        Membership.org_id == course.org_id,
+                        Membership.user_id == user.id,
+                        Membership.role == Role.admin,
+                    )
+                )
+                is not None
+            )
+        else:
+            allowed = course.owner_user_id == user.id
     # 404, not 403, for someone else's course: don't confirm that the id exists.
-    if course is None or course.owner_user_id != user.id:
+    if course is None or not allowed:
         raise HTTPException(404, "course not found")
     return course
+
+
+def _require_personal(course: Course) -> None:
+    """The learner-facing J1 steps (probe, assess, accept) are a personal course's path. An org
+    course has no diagnostic probe, and accepting it would enroll the admin: the admin builds a
+    template, and each learner's plan starts from a copy (ADR-0004)."""
+    if course.scope == CourseScope.org:
+        raise HTTPException(
+            409,
+            "Org courses have no diagnostic probe: an admin builds the template, and each "
+            "learner's plan starts from a copy of it.",
+        )
 
 
 async def latest_assessment(
@@ -116,6 +180,7 @@ async def run_probe(
 ) -> Assessment:
     """Generate the diagnostic questions once. Calling it again returns the same probe, so a
     retry or double-click doesn't spend a second LLM call or change the questions."""
+    _require_personal(course)
     existing = await latest_assessment(db, course.id, user.id)
     if existing is not None:
         return existing
@@ -144,6 +209,7 @@ async def run_assess(
 ) -> Assessment:
     """Assess the answers once. After that the result is locked: resubmitting returns it
     unchanged, so a learner can't re-roll answers until the level comes out higher."""
+    _require_personal(course)
     assessment = await latest_assessment(db, course.id, user.id)
     if assessment is None:
         raise HTTPException(409, "Write the diagnostic questions first.")
@@ -180,6 +246,7 @@ async def run_assess(
 async def run_map(db: AsyncSession, llm: LLMClient, user: CurrentUser, course: Course) -> Course:
     """Generate the concept map once, from the intake and the assessment. Stored as the
     course's base map (`template_plan`), which accept copies into the learner's plan v1."""
+    _require_personal(course)
     if course.template_plan is not None:
         return course
     assessment = await latest_assessment(db, course.id, user.id)
@@ -239,6 +306,7 @@ async def remove_concept(db: AsyncSession, course: Course, concept_id: str) -> C
 async def accept_map(db: AsyncSession, redis: Redis, user: CurrentUser, course: Course) -> Course:
     """Accept the map: the course becomes this learner's. One transaction creates the
     enrollment, plan v1 (a copy of the base map, ADR-0016) and one progress row per concept."""
+    _require_personal(course)
     if course.status == CourseStatus.active:
         return course  # already accepted
     cmap = _editable_map(course)
@@ -293,9 +361,27 @@ async def course_detail(db: AsyncSession, user: CurrentUser, course: Course) -> 
             Enrollment.course_id == course.id, Enrollment.user_id == user.id
         )
     )
+    docs: list[CourseDocRef] = []
+    if course.doc_ids:
+        by_id = {
+            str(d.id): d
+            for d in await db.scalars(
+                select(OrgDoc).where(OrgDoc.id.in_([uuid.UUID(i) for i in course.doc_ids]))
+            )
+        }
+        docs = [
+            CourseDocRef(slug=d.slug, title=d.title, section_count=len(d.sections))
+            for i in course.doc_ids
+            if (d := by_id.get(str(i))) is not None
+        ]
+    org_name = await db.scalar(select(Org.name).where(Org.id == course.org_id))
     return CourseDetail(
         id=course.id,
         title=course.title,
+        scope=course.scope,
+        org_name=org_name,
+        docs=docs,
+        doc_set_hash=course.doc_set_hash,
         status=course.status,
         config=CourseConfig.model_validate(course.config),
         mission=Mission.model_validate(course.mission),

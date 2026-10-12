@@ -3,8 +3,10 @@
 // Round 1, intake (spec §4.1): one form, every knob pre-filled with a recommended default so
 // most learners only type a topic. Submitting saves the course, then asks the instructor for
 // the diagnostic questions (round 2) and opens the course page to answer them.
+// An org admin can instead build an org course: the same intake plus the org's docs it is
+// grounded in. That course has no diagnostic probe (ADR-0004), so submit stops after saving.
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { BackLink, Page } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -14,9 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiPost, type Schemas } from "@/lib/api";
+import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
 
 type Intake = Schemas["CourseIntake"];
+type OrgMembership = Schemas["OrgMembershipOut"];
+type DocSummary = Schemas["OrgDocSummary"];
 type CourseDetail = Schemas["CourseDetail"];
 type Mode = Schemas["Mission"]["mode"];
 type SelfLevel = Schemas["CourseConfig"]["self_level"];
@@ -62,6 +66,29 @@ export default function NewCoursePage() {
   const [formats, setFormats] = useState(["reading", "quizzes", "hands_on"]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Org mode: only offered to an admin of an org. Docs are all picked to begin with.
+  const [adminOrg, setAdminOrg] = useState<OrgMembership | null>(null);
+  const [orgDocs, setOrgDocs] = useState<DocSummary[]>([]);
+  const [forOrg, setForOrg] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+
+  useEffect(() => {
+    // A failure here only hides org mode; a personal course doesn't need it.
+    apiGet<OrgMembership[]>("/orgs")
+      .then(async (orgs) => {
+        const org = orgs.find((o) => o.role === "admin");
+        if (!org) return;
+        const docs = await apiGet<DocSummary[]>(`/orgs/${org.slug}/docs`);
+        setAdminOrg(org);
+        setOrgDocs(docs);
+        setPicked(docs.map((d) => d.slug));
+      })
+      .catch(() => {});
+  }, []);
+
+  function togglePicked(slug: string, on: boolean) {
+    setPicked((p) => (on ? [...p, slug] : p.filter((s) => s !== slug)));
+  }
 
   function toggleFormat(id: string, on: boolean) {
     setFormats((f) => (on ? [...f, id] : f.filter((x) => x !== id)));
@@ -85,6 +112,7 @@ export default function NewCoursePage() {
         deadline: deadline || null,
         analogy_domain: analogy.trim() || null,
       },
+      ...(forOrg && adminOrg ? { org_slug: adminOrg.slug, doc_slugs: picked } : {}),
     };
     let course: CourseDetail;
     try {
@@ -95,12 +123,14 @@ export default function NewCoursePage() {
       setError((err as Error).message);
       return setBusy(null);
     }
-    try {
-      // Called from the submit handler, not an effect, so React dev mode can't fire it twice.
-      setBusy("Writing your diagnostic questions…");
-      await apiPost<CourseDetail>(`/courses/${course.id}/probe`);
-    } catch {
-      // The course is saved; its page shows the error state and a retry button.
+    if (!forOrg) {
+      try {
+        // Called from the submit handler, not an effect, so React dev mode can't fire it twice.
+        setBusy("Writing your diagnostic questions…");
+        await apiPost<CourseDetail>(`/courses/${course.id}/probe`);
+      } catch {
+        // The course is saved; its page shows the error state and a retry button.
+      }
     }
     // Next 16 keeps this page alive (hidden in <Activity>) after we navigate, and Back restores
     // its state. Reset before leaving, or Back shows a stuck "Writing…" button and the old draft.
@@ -122,6 +152,52 @@ export default function NewCoursePage() {
       </header>
 
       <form onSubmit={submit} className="space-y-6">
+        {adminOrg && (
+          <Card>
+            <CardContent className="space-y-4">
+              <Field label="Who is this course for?" htmlFor="scope">
+                <NativeSelect
+                  id="scope"
+                  className="w-full"
+                  value={forOrg ? "org" : "personal"}
+                  onChange={(e) => setForOrg(e.target.value === "org")}
+                >
+                  <NativeSelectOption value="personal">Just me</NativeSelectOption>
+                  <NativeSelectOption value="org">
+                    {adminOrg.name}: a course for your team, grounded in your docs
+                  </NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              {forOrg && (
+                <fieldset className="space-y-2">
+                  <legend className="text-strong text-sm font-semibold">
+                    Ground it in these docs
+                  </legend>
+                  <p className="text-muted-foreground text-xs">
+                    Lessons cite the section they draw from, and say so when your docs don&apos;t
+                    cover something. The set is pinned when you create the course.
+                  </p>
+                  {orgDocs.map((d) => (
+                    <label key={d.slug} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={picked.includes(d.slug)}
+                        onCheckedChange={(on) => togglePicked(d.slug, on)}
+                      />
+                      <span>
+                        {d.title}
+                        <span className="text-muted-foreground ml-2 text-xs">
+                          {d.section_count} sections
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardContent className="space-y-4">
             <Field label="What do you want to learn?" htmlFor="topic">
@@ -157,7 +233,11 @@ export default function NewCoursePage() {
 
         <Card>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field label="Your current level" htmlFor="self-level" hint="We'll check it">
+            <Field
+              label={forOrg ? "Where your learners start" : "Your current level"}
+              htmlFor="self-level"
+              hint={forOrg ? "Plans the template" : "We'll check it"}
+            >
               <NativeSelect
                 id="self-level"
                 className="w-full"
@@ -253,8 +333,8 @@ export default function NewCoursePage() {
 
         {error && <p className="text-destructive text-sm">{error}</p>}
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={busy !== null}>
-            {busy ?? "Create course"}
+          <Button type="submit" disabled={busy !== null || (forOrg && picked.length === 0)}>
+            {busy ?? (forOrg ? "Create org course" : "Create course")}
           </Button>
           <Button type="button" variant="outline" onClick={() => router.push("/")} disabled={busy !== null}>
             Cancel

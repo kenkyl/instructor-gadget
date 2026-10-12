@@ -695,6 +695,256 @@
         }
       }
     },
+    "/api/orgs": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "summary": "My Orgs",
+        "description": "The orgs the caller belongs to, with their role (who may upload docs and build courses).",
+        "operationId": "my_orgs_api_orgs_get",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrgMembershipOut"
+                  },
+                  "title": "Response My Orgs Api Orgs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_slug}/docs": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "summary": "List Docs",
+        "operationId": "list_docs_api_orgs__org_slug__docs_get",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Slug"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrgDocSummary"
+                  },
+                  "title": "Response List Docs Api Orgs  Org Slug  Docs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "orgs"
+        ],
+        "summary": "Upload Doc",
+        "description": "Add a doc (admins only). Uploading the same doc again returns it with a 200.",
+        "operationId": "upload_doc_api_orgs__org_slug__docs_post",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Slug"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgDocIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgDocDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_slug}/docs/{doc_slug}": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "summary": "Get Doc",
+        "operationId": "get_doc_api_orgs__org_slug__docs__doc_slug__get",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Slug"
+            }
+          },
+          {
+            "name": "doc_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Slug"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgDocDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enrollments/{enrollment_id}": {
       "get": {
         "tags": [
@@ -1894,6 +2144,20 @@
             "type": "string",
             "title": "Title"
           },
+          "scope": {
+            "$ref": "#/components/schemas/CourseScope"
+          },
+          "org_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Name"
+          },
           "status": {
             "$ref": "#/components/schemas/CourseStatus"
           },
@@ -1948,17 +2212,60 @@
               }
             ],
             "title": "Enrollment Id"
+          },
+          "docs": {
+            "items": {
+              "$ref": "#/components/schemas/CourseDocRef"
+            },
+            "type": "array",
+            "title": "Docs"
+          },
+          "doc_set_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Set Hash"
           }
         },
         "type": "object",
         "required": [
           "id",
           "title",
+          "scope",
           "status",
           "config",
           "mission"
         ],
         "title": "CourseDetail"
+      },
+      "CourseDocRef": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "section_count": {
+            "type": "integer",
+            "title": "Section Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "section_count"
+        ],
+        "title": "CourseDocRef",
+        "description": "A doc a course is grounded in, as the course page lists it."
       },
       "CourseIntake": {
         "properties": {
@@ -1967,6 +2274,25 @@
           },
           "mission": {
             "$ref": "#/components/schemas/Mission"
+          },
+          "org_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Slug"
+          },
+          "doc_slugs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Doc Slugs"
           }
         },
         "type": "object",
@@ -1976,6 +2302,14 @@
         ],
         "title": "CourseIntake",
         "description": "The intake form (spec \u00a74.1). Defaults live in CourseConfig/Mission and the form."
+      },
+      "CourseScope": {
+        "type": "string",
+        "enum": [
+          "personal",
+          "org"
+        ],
+        "title": "CourseScope"
       },
       "CourseStatus": {
         "type": "string",
@@ -2129,6 +2463,25 @@
           "served_from"
         ],
         "title": "DashboardResponse"
+      },
+      "DocSection": {
+        "properties": {
+          "anchor": {
+            "type": "string",
+            "title": "Anchor"
+          },
+          "heading": {
+            "type": "string",
+            "title": "Heading"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anchor",
+          "heading"
+        ],
+        "title": "DocSection",
+        "description": "One citable section of a doc: stored in `org_docs.sections` (JSONB)."
       },
       "EnrollmentDetail": {
         "properties": {
@@ -2542,6 +2895,155 @@
         ],
         "title": "Mission",
         "description": "Stored in courses.mission (JSONB): what the learner is really after (spec \u00a74.1)."
+      },
+      "OrgDocDetail": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "section_count": {
+            "type": "integer",
+            "title": "Section Count"
+          },
+          "chars": {
+            "type": "integer",
+            "title": "Chars"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "content_md": {
+            "type": "string",
+            "title": "Content Md"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/DocSection"
+            },
+            "type": "array",
+            "title": "Sections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "section_count",
+          "chars",
+          "content_hash",
+          "created_at",
+          "content_md",
+          "sections"
+        ],
+        "title": "OrgDocDetail"
+      },
+      "OrgDocIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 2,
+            "title": "Title"
+          },
+          "content_md": {
+            "type": "string",
+            "maxLength": 60000,
+            "minLength": 1,
+            "title": "Content Md"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug",
+            "description": "Defaults to one made from the title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "content_md"
+        ],
+        "title": "OrgDocIn"
+      },
+      "OrgDocSummary": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "section_count": {
+            "type": "integer",
+            "title": "Section Count"
+          },
+          "chars": {
+            "type": "integer",
+            "title": "Chars"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "section_count",
+          "chars",
+          "content_hash",
+          "created_at"
+        ],
+        "title": "OrgDocSummary"
+      },
+      "OrgMembershipOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "role"
+        ],
+        "title": "OrgMembershipOut"
       },
       "OverrideRequest": {
         "properties": {
@@ -3193,6 +3695,14 @@
         ],
         "title": "Remedy",
         "description": "Set by code (never the model) on a remediation concept inserted by the adapt rules."
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "member",
+          "admin"
+        ],
+        "title": "Role"
       },
       "Rule": {
         "type": "string",

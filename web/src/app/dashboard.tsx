@@ -12,12 +12,19 @@ import { ApiError, apiGet, apiPost, type Schemas } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type DashboardData = Schemas["DashboardResponse"];
+type OrgMembership = Schemas["OrgMembershipOut"];
 type Course = DashboardData["courses"][number];
 
 export function Dashboard() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [orgs, setOrgs] = useState<OrgMembership[]>([]);
+
+  useEffect(() => {
+    // Only decides whether to show the "Org docs" link, so a failure just hides it.
+    apiGet<OrgMembership[]>("/orgs").then(setOrgs, () => {});
+  }, []);
 
   useEffect(() => {
     apiGet<DashboardData>("/dashboard").then(setData, (e: Error) => {
@@ -47,6 +54,11 @@ export function Dashboard() {
             <span className="bg-cyan size-1.5 rounded-full" />
             {data.served_from === "cache" ? "Served from Redis cache" : "Rebuilt from Postgres"}
           </span>
+          {orgs.length > 0 && (
+            <Link href="/org/docs" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+              Org docs
+            </Link>
+          )}
           <Link href="/trace" className={buttonVariants({ variant: "ghost", size: "sm" })}>
             Trace
           </Link>

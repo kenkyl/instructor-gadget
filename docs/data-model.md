@@ -341,7 +341,7 @@ Links a user to an org, with a role. The PK is `(user_id, org_id)`.
 | Operation | When | How |
 |---|---|---|
 | Write | Seed | Upsert on `(user_id, org_id)` |
-| Read | Authorization: only admins create, ground and assign org courses (🔜 CP4); dashboard org labels | Join on user |
+| Read | Authorization: members read an org's docs; only admins upload them and create org courses (✔︎ PC4.1: `org_docs` service); admins assign (🔜 PC4.3). Dashboard org labels | Join on user |
 
 | user | org | role |
 |---|---|---|
@@ -365,17 +365,17 @@ The **shared definition** of a course: what it's about and how it's configured. 
 | `mission` | jsonb | no | `Mission` (§5.1): goal, what "expert" means, mode, analogy domain |
 | `status` | varchar(32) | no | `draft` → `probed` → `assessed` → `mapped` → `active` |
 | `template_plan` | jsonb | yes | The course's base `ConceptMap` (ADR-0016): proposed while `mapped`, final once accepted; each enrollment copies it into plan v1. For org courses, the admin-accepted map |
-| `doc_ids` | jsonb | no | Org doc ids used for grounding (default `[]`) |
-| `doc_set_hash` | varchar(64) | yes | Hash of the grounding doc set; part of the semantic cache bucket |
+| `doc_ids` | jsonb | no | ✔︎ PC4.1. Org doc ids (as strings) the course is grounded in, in the order the admin chose; `[]` for a personal course. Pinned at creation (ADR-0028) |
+| `doc_set_hash` | varchar(64) | yes | ✔︎ PC4.1. `sources.doc_set_hash` of the pinned docs (sha256 over the sorted `slug:content_hash` lines, so order-independent); null for a personal course. Part of the semantic cache bucket (ADR-0007) |
 | `created_at`, `updated_at` | timestamptz | no | `updated_at` is set on every update |
 
 **Integrity:** `ck_courses_scope_owner` requires a personal course to have an owner and no org, and an org course to have an org and no owner.
 
 | Operation | When | How |
 |---|---|---|
-| Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner |
+| Write | Intake form submitted (✔︎ PC1.1, `POST /api/courses`) | Insert with `status=draft`, `scope=personal`, owner = the learner. With `org_slug` + `doc_slugs` (✔︎ PC4.1, admins only): `scope=org`, `org_id`, no owner, and `doc_ids` + `doc_set_hash` pinned from the chosen docs (1+ docs, within `MAX_SET_CHARS`) |
 | Update | After probe (✔︎ PC1.1: `draft` → `probed`), assessment (✔︎ PC1.2: → `assessed`), map (✔︎ PC1.3: → `mapped`, once only), and accept (✔︎ PC1.4: → `active`) | `status` advances; `template_plan` is set by `map-concepts` (validated `ConceptMap`) and edited before accept (✔︎ PC1.4, `DELETE /api/courses/{id}/map/concepts/{concept_id}`: dependents are rewired, ADR-0017); read-only once `active` |
-| Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; list by owner or org |
+| Read | Dashboard, course page, every generation call (config and mission shape the prompts) | By id; a personal course by its owner, an org course by an admin of its org (`get_owned_course`). Learners reach an org course through their enrollment (🔜 PC4.3) |
 
 ```json
 {
@@ -654,15 +654,15 @@ An org's internal docs, used for grounding. Phase 1 puts them directly into the 
 | `org_id` | uuid | no | FK → orgs |
 | `title` | varchar(300) | no | |
 | `slug` | varchar(100) | no | Citation key, e.g. `on-call-runbook` |
-| `content_md` | text | no | Full markdown |
-| `sections` | jsonb | no | `[{anchor, heading}]`, parsed from headings; citations must point at these |
-| `content_hash` | varchar(64) | no | Feeds `courses.doc_set_hash` |
+| `content_md` | text | no | Full markdown, normalized (`\n` line endings, trimmed, one trailing newline) so it always matches `content_hash`. At most `MAX_DOC_CHARS` (60,000) |
+| `sections` | jsonb | no | `[DocSection]` (§5.6), parsed from every heading outside a code fence; citations must point at these |
+| `content_hash` | varchar(64) | no | sha256 of `content_md`; feeds `courses.doc_set_hash` |
 | `created_at` | timestamptz | no | |
 
 | Operation | When | How |
 |---|---|---|
-| Write | Seed (the 4 Acme AI docs) or admin upload (🔜 PC4.1) | Insert; sections and hash computed on write |
-| Read | Grounded generation (the `ground-in-sources` skill composes them into prompts); citation checks in evals | By `course.doc_ids` |
+| Write | Seed (the 4 Acme AI docs: upsert on `(org_id, slug)`) or admin upload (✔︎ PC4.1, `POST /api/orgs/{org_slug}/docs`) | Insert; slug (from the title unless given), sections and hash computed in code (`agent/sources.py`). **Immutable via the API** (ADR-0028): the same slug with the same content returns the stored doc, with different content is a 409. An upload needs at least one heading |
+| Read | List and read (✔︎ PC4.1, members of the org only: `GET /api/orgs/{org_slug}/docs[/{doc_slug}]`); grounded generation (the `ground-in-sources` skill composes them into prompts, 🔜 PC4.2); citation checks in evals | By `course.doc_ids` |
 
 ```json
 { "slug": "postmortem-pool-exhaustion", "title": "Postmortem: model-router connection-pool exhaustion",
@@ -791,6 +791,17 @@ The `fsrs` package (Free Spaced Repetition Scheduler, v6) is serialized with `Ca
 { "card_id": 1760166000123, "state": 2, "step": null, "stability": 3.17, "difficulty": 5.28,
   "due": "2026-10-14T09:00:00+00:00", "last_review": "2026-10-11T09:00:00+00:00" }
 ```
+
+### 5.6 `DocSection` (stored in `org_docs.sections`)
+
+Defined in `agent/sources.py`. One entry per heading (`#` to `######`) outside a fenced code block, in document order. Anchors are computed by code and unique within the doc; the model only ever chooses among them.
+
+| Model | Field | Type | Notes |
+|---|---|---|---|
+| DocSection | `anchor` | str | GitHub-style slug of the heading; a repeat gets `-2`, `-3`, … |
+| | `heading` | str | The heading text without inline marks or closing `#`s |
+
+Limits (`agent/sources.py`): one doc is at most `MAX_DOC_CHARS` = 60,000 characters, and the docs behind one course at most `MAX_SET_CHARS` = 160,000 (about 40k tokens: context stuffing has a ceiling, RAG is the upgrade past it).
 
 ---
 

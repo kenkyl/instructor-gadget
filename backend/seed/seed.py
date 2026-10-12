@@ -1,5 +1,5 @@
-"""Idempotent seed: the sample org, its users, memberships and the seeded prototypes.
-Safe to run repeatedly.
+"""Idempotent seed: the sample org, its users, memberships, its internal docs and the seeded
+prototypes. Safe to run repeatedly.
 
 Run with `make seed`. Course/learner sample state is added at CP6.
 """
@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from agent import sources
 from app.config import get_settings
-from app.models import Membership, Org, Prototype, Role, User
+from app.models import Membership, Org, OrgDoc, Prototype, Role, User
 
 ORGS = [{"slug": "acme", "name": "Acme AI"}]
 
@@ -26,6 +27,36 @@ MEMBERSHIPS = [  # (username, org slug, role)
     ("dana", "acme", Role.member),
     ("priya", "acme", Role.admin),
 ]
+
+
+# The org's internal docs: `org_docs/<org slug>/<doc slug>.md`. The title is the file's first `# `
+# heading; sections and hashes are computed by agent/sources.py, exactly as for an upload.
+#
+# What the Acme docs deliberately do NOT cover, so a grounded course has real gaps to flag
+# ("This isn't covered in your docs") and the grounding eval has absent topics to probe:
+#   - who to escalate to after the secondary on-call (the runbook stops at PagerDuty's page)
+#   - on-call compensation or time off in lieu
+#   - disaster recovery and region failover
+#   - how to triage Kafka consumer lag (only that a Kafka outage delays billing)
+#   - the security review process for a new dependency
+ORG_DOCS_DIR = Path(__file__).parent / "org_docs"
+
+
+def load_org_docs() -> list[tuple[str, dict[str, object]]]:
+    """(org slug, org_docs column values) for every doc file."""
+    docs: list[tuple[str, dict[str, object]]] = []
+    for path in sorted(ORG_DOCS_DIR.glob("*/*.md")):
+        content = sources.normalize(path.read_text())
+        title = next(ln[2:].strip() for ln in content.splitlines() if ln.startswith("# "))
+        values: dict[str, object] = {
+            "slug": path.stem,
+            "title": title,
+            "content_md": content,
+            "sections": [s.model_dump() for s in sources.parse_sections(content)],
+            "content_hash": sources.content_hash(content),
+        }
+        docs.append((path.parent.name, values))
+    return docs
 
 
 # Hand-built, hand-checked prototypes (spec §4.5; live generation is P1+). Each HTML file is
@@ -62,6 +93,12 @@ async def seed(engine: AsyncEngine) -> None:
                     index_elements=["user_id", "org_id"], set_={"role": role}
                 )
             )
+        for org_slug, doc in load_org_docs():
+            values = {**doc, "org_id": org_ids[org_slug]}
+            stmt = insert(OrgDoc).values(**values)
+            await conn.execute(
+                stmt.on_conflict_do_update(index_elements=["org_id", "slug"], set_=values)
+            )
         for proto in PROTOTYPES:
             values = {**proto, "html": (PROTOTYPE_DIR / f"{proto['slug']}.html").read_text()}
             stmt = insert(Prototype).values(**values)
@@ -76,7 +113,7 @@ async def main() -> None:
         await engine.dispose()
     print(
         f"Seeded {len(ORGS)} org, {len(USERS)} users, {len(MEMBERSHIPS)} memberships, "
-        f"{len(PROTOTYPES)} prototype."
+        f"{len(load_org_docs())} org docs, {len(PROTOTYPES)} prototype."
     )
 
 

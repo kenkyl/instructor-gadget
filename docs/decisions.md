@@ -339,3 +339,18 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 **Alternatives:** Course-scoped rows: leaks other learners' excerpts on shared courses. Estimating savings from token prices: a guess, when the original call's real cost is already logged. Caching the tile in Redis: one indexed aggregate over a learner's calls is milliseconds, and a cached tile would need invalidating on every call.
 **Consequences:** A learner sees their own reuse, including hits on lessons generated for other courses or other learners (the trace says where it saved, never whose lesson it was). The org-wide view, where the cost per learner visibly falls as more learners reuse lessons, belongs to CP4's admin flow, on the same query without the `user_id` filter and without excerpts.
 **One-liner:** The trace is a receipt: your own calls, and savings measured from what the original generation actually cost.
+
+## ADR-0028: Org docs are immutable; a course pins its doc set when it is created
+**Context:** The semantic-cache bucket includes the doc-set hash (ADR-0007, ADR-0023), so a lesson is only shared among courses grounded in exactly the same docs. If a doc could change in place, a course would be grounded in different text than the hash it was cached under says.
+**Decision:**
+- The API has no update path for an org doc. Uploading the same key with the same content returns the stored doc; with different content it is a 409, and the admin uploads the revision under a new title.
+- An org course (admins only, no diagnostic probe) stores `doc_ids` and `doc_set_hash` at creation. The hash is sha256 over the sorted `slug:content_hash` lines, so it ignores the order docs were ticked in and changes on any edit or rename.
+- Citable sections are every heading outside a code fence, with unique anchors computed by code (`agent/sources.py`); a doc with no headings is refused. A doc is at most 60,000 characters and a course's set at most 160,000 (about 40k tokens), the context-stuffing budget.
+**Alternatives:**
+- Versioned docs (a `doc_versions` table): the right shape for edits, but more tables and a "which version" choice for every course, with nothing yet that needs it.
+- Edit in place and recompute the hash of every course that uses the doc: a course silently changes under its learners, and lessons already generated cite text that no longer exists.
+- Hash content only, not the slug: a rename wouldn't invalidate lessons that cite the old slug.
+**Consequences:**
+- An admin can't fix a typo in place; they add a new doc and a new course. That's acceptable for a template that is assigned to many learners.
+- `make seed` upserts the seeded docs, so a developer edit to a seed file can leave an existing dev course with a stale pinned hash. PC4.2 therefore computes the bucket's hash from the docs actually put in the prompt, and treats the stored value as what the course was created with.
+**One-liner:** A course is built on a specific version of its docs, so the docs never change under it; a revision is a new doc.

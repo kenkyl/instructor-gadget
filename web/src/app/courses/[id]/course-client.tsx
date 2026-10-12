@@ -8,6 +8,8 @@
 //   mapped   → the concept map: a dependency-ordered list with the reasoning for the order.
 //              The learner can cut concepts (warned about dependents), then accept.
 //   active   → accepted: an enrollment exists and the course is on the dashboard.
+// An org course (an admin's template, grounded in docs) skips all of that: it has no probe
+// (ADR-0004), so its draft shows the docs it is pinned to instead.
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -64,6 +66,7 @@ export default function CoursePage() {
   const assessment = course.assessment ?? null;
   const conceptMap = course.concept_map ?? null;
   const { config, mission } = course;
+  const isOrg = course.scope === "org";
 
   return (
     <Page className="space-y-8">
@@ -76,7 +79,7 @@ export default function CoursePage() {
               ["Time", `${config.target_hours} h`],
               ["Mode", mission.mode],
               ["Target", config.target_level],
-              ["You said", config.self_level],
+              [isOrg ? "Learners start" : "You said", config.self_level],
               ["Stage", course.status],
             ] as const
           ).map(([k, v]) => (
@@ -88,7 +91,9 @@ export default function CoursePage() {
         </dl>
       </header>
 
-      {questions.length === 0 ? (
+      {isOrg ? (
+        <OrgTemplateCard course={course} />
+      ) : questions.length === 0 ? (
         <Card>
           <CardContent className="space-y-3">
             <p className="text-sm">
@@ -357,6 +362,51 @@ function ConceptMapCard({
             </p>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OrgTemplateCard({ course }: { course: CourseDetail }) {
+  const docs = course.docs ?? [];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {course.org_name} course, grounded in {docs.length} {docs.length === 1 ? "doc" : "docs"}
+        </CardTitle>
+        <CardDescription>
+          Lessons cite the section they draw from, and say so when these docs don&apos;t cover
+          something.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ul className="divide-y border-y">
+          {docs.map((d) => (
+            <li
+              key={d.slug}
+              className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm"
+            >
+              <span className="text-strong">{d.title}</span>
+              <span className="text-muted-foreground font-mono text-xs">
+                {d.slug} · {d.section_count} sections
+              </span>
+            </li>
+          ))}
+        </ul>
+        {course.doc_set_hash && (
+          <p className="text-muted-foreground text-sm">
+            Doc set{" "}
+            <span className="text-cyan-ink font-mono" title={course.doc_set_hash}>
+              {course.doc_set_hash.slice(0, 12)}
+            </span>
+            . Lessons are only ever shared with courses grounded in exactly this set.
+          </p>
+        )}
+        <p className="text-sm">
+          Org courses have no diagnostic probe: you build the template, and each learner&apos;s plan
+          starts from a copy of it. The template builder isn&apos;t available yet.
+        </p>
       </CardContent>
     </Card>
   );
