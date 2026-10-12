@@ -1,6 +1,6 @@
 # Build log
 
-> **Current status:** CP5 ✅ merged (PR #7). **CP6 ✅ built** (sample data, reset, warm-cache, docs, run-through) on `cp6/hardening`, PR #8 (retargeted to `main`) ready for review. Next: Kyle merges PR #8; then `git tag v0.1.0 && git push --tags`.
+> **Current status:** **Phase 1 complete: `v0.1.0`** (tagged on `main` at the merge of PR #8). CP0–CP6 all merged. Next, only if wanted: P1+ items in `docs/build-plan.md`, in order (1. outside knowledge in org courses, ADR-0032), each on its own branch and PR. Open follow-ups worth doing first: a grader-calibration answer labelled 3, and the uncited-claim lever for grounded lessons (build plan, Known follow-ups).
 > **Resuming in a new session:** read `CLAUDE.md`, this file, `docs/build-plan.md`, and `docs/decisions.md`, then start the next PC listed above. Load the `claude-api` skill before writing LLM code.
 
 One entry per checkpoint. Each entry covers what we built, the key prompts and decisions, where the AI went wrong or needed correcting, and the tradeoffs we accepted.
