@@ -1,0 +1,426 @@
+# Sample courses for `make reset` (seed/sample.py). Real model output: `completed` and `org` maps
+# exported from development runs; `incident` (assessment + map) generated for this file from the
+# over-claimer persona in agent/skills/diagnose/evals/cases.yaml (2026-10-12, Sonnet 5.5).
+incident:
+  title: Incident investigation fundamentals for on-call engineers
+  config:
+    topic: Incident investigation fundamentals for on-call engineers
+    target_hours: 3.0
+    target_level: intermediate
+    self_level: intermediate
+    formats:
+    - reading
+    - quizzes
+    - hands_on
+  mission:
+    goal: Be ready for my first on-call rotation
+    expert_means: I can lead an incident without escalating for basics
+    mode: foundation
+    deadline: null
+    analogy_domain: null
+  assessment:
+    probe:
+      questions:
+      - id: q1
+        prompt: A service's p99 latency doubles but CPU is flat. What do you check first, and why?
+        targets_concept: saturation vs. utilization
+        level: intermediate
+      - id: q2
+        prompt: What's the difference between a liveness and a readiness probe failing?
+        targets_concept: Kubernetes probes
+        level: intermediate
+      - id: q3
+        prompt: Why might adding more app replicas make a database connection problem worse?
+        targets_concept: connection pools
+        level: intermediate
+    answers:
+      q1: I'd restart the service, that usually fixes it.
+      q2: Not sure, I think they're the same thing.
+      q3: More replicas means more capacity so it should help.
+    result:
+      claimed_level: intermediate
+      assessed_level: novice
+      confidence: 0.8
+      evidence:
+      - question_id: q1
+        observation: 'Answered ''restart the service, that usually fixes it.'' This skips diagnosis entirely:
+          no check of saturation signals (queues, thread or connection pools, disk or network I/O, dependencies)
+          and no reasoning about why latency rose while CPU stayed flat. A restart can also destroy evidence
+          and mask the cause.'
+        points_to: novice
+      - question_id: q2
+        observation: 'Said ''Not sure, I think they''re the same thing.'' This is incorrect: liveness
+          decides whether a container gets restarted, readiness decides whether it receives traffic. The
+          honest uncertainty is useful, but the answer shows the concept is missing.'
+        points_to: novice
+      - question_id: q3
+        observation: Said more replicas means more capacity so it should help. This misses that each replica
+          opens its own connection pool, so more replicas can exhaust the database's connection limit
+          and worsen the problem. It treats scaling as always beneficial.
+        points_to: novice
+      gaps:
+      - Diagnosing latency when CPU is flat (saturation vs. utilization, checking dependencies and queues)
+      - Restarting as a default response instead of investigating first and preserving evidence
+      - Difference between liveness and readiness probes and what each triggers
+      - How replica count multiplies database connections and can exhaust connection limits
+      adjustment_message: You said intermediate, but your three answers suggest we should start at novice.
+        For the latency question you'd restart the service rather than investigate, and for the replica
+        question you assumed more replicas always add capacity, when each one opens its own connections
+        and can overload the database. You also weren't sure about liveness versus readiness probes. Since
+        you want to lead incidents without escalating for basics, we'll start with how to investigate
+        systematically before acting, then build up toward intermediate. Every concept ends in a quiz,
+        and a strong result lets you test out of the next concept, so the course can correct if this starting
+        point turns out too low.
+  template_plan:
+    concepts:
+    - id: incident-roles-severity
+      title: Incident roles and severity
+      mastery_statement: You can assign severity to a described incident and name what the incident commander,
+        communications lead and responder each do.
+      objective_level: apply
+      prereqs: []
+      est_minutes: 15
+      concept_type: conceptual
+      remedy: null
+    - id: evidence-before-restart
+      title: Investigate first, preserve evidence
+      mastery_statement: You can explain why restarting is not a default first response and list the evidence
+        you capture before any restart.
+      objective_level: understand
+      prereqs:
+      - incident-roles-severity
+      est_minutes: 15
+      concept_type: conceptual
+      remedy: null
+    - id: golden-signals-triage
+      title: Golden signals for triage
+      mastery_statement: You can read latency, traffic, errors and saturation readings to decide which
+        part of a service to investigate first.
+      objective_level: apply
+      prereqs:
+      - incident-roles-severity
+      est_minutes: 15
+      concept_type: conceptual
+      remedy: null
+    - id: utilization-vs-saturation
+      title: Utilization vs. saturation
+      mastery_statement: You can distinguish utilization from saturation and explain how latency can rise
+        while CPU stays flat.
+      objective_level: analyze
+      prereqs:
+      - golden-signals-triage
+      est_minutes: 20
+      concept_type: systems
+      remedy: null
+    - id: dependencies-and-queues
+      title: Checking dependencies and queues
+      mastery_statement: You can diagnose a latency incident with flat CPU by checking queue depth, thread
+        pools and downstream dependencies in order.
+      objective_level: analyze
+      prereqs:
+      - utilization-vs-saturation
+      - evidence-before-restart
+      est_minutes: 25
+      concept_type: systems
+      remedy: null
+    - id: liveness-readiness-probes
+      title: Liveness vs. readiness probes
+      mastery_statement: You can explain what liveness and readiness probes each trigger and choose which
+        one a failing check should use.
+      objective_level: understand
+      prereqs: []
+      est_minutes: 20
+      concept_type: systems
+      remedy: null
+    - id: probe-misconfig-diagnosis
+      title: Diagnosing probe-driven restarts
+      mastery_statement: You can diagnose a restart loop or traffic drop caused by a misconfigured probe
+        from pod events and probe settings.
+      objective_level: analyze
+      prereqs:
+      - liveness-readiness-probes
+      - evidence-before-restart
+      est_minutes: 20
+      concept_type: systems
+      remedy: null
+    - id: replicas-and-db-connections
+      title: Replica count and database connections
+      mastery_statement: You can calculate total database connections from replica count and pool size
+        and predict when a scale-up exhausts the connection limit.
+      objective_level: apply
+      prereqs:
+      - dependencies-and-queues
+      est_minutes: 25
+      concept_type: math
+      remedy: null
+    - id: lead-incident-end-to-end
+      title: Leading an incident end to end
+      mastery_statement: You can lead a simulated incident from detection through mitigation and handoff,
+        choosing investigation steps and communicating status without escalating for basics.
+      objective_level: evaluate
+      prereqs:
+      - probe-misconfig-diagnosis
+      - replicas-and-db-connections
+      est_minutes: 25
+      concept_type: conceptual
+      remedy: null
+    sequence:
+    - incident-roles-severity
+    - evidence-before-restart
+    - golden-signals-triage
+    - utilization-vs-saturation
+    - dependencies-and-queues
+    - liveness-readiness-probes
+    - probe-misconfig-diagnosis
+    - replicas-and-db-connections
+    - lead-incident-end-to-end
+    sequence_rationale: Your assessment showed gaps in restarting by default, latency with flat CPU, probes
+      and connection limits, so those come right after the short roles and severity base. Investigating
+      before restarting comes first because it shapes every later diagnosis, then saturation and queues
+      build on the golden signals. Probes and connection math follow as separate failure modes you can
+      then tell apart. The path ends with leading a full simulated incident, which is what leading without
+      escalating for basics requires.
+    test_out: []
+completed:
+  title: Redis data structures
+  config:
+    topic: Redis data structures
+    formats:
+    - reading
+    - quizzes
+    - hands_on
+    self_level: strong
+    target_hours: 3.0
+    target_level: advanced
+  mission:
+    goal: Redis data structures
+    mode: foundation
+    deadline: '2026-10-12'
+    expert_means: I can apply it confidently at work and explain the tradeoffs to a colleague.
+    analogy_domain: null
+  template_plan:
+    concepts:
+    - id: redis-core-model
+      title: Redis core model and strings
+      prereqs: []
+      est_minutes: 15
+      concept_type: conceptual
+      objective_level: understand
+      mastery_statement: You can explain how single-threaded command execution and the string type make
+        each individual command atomic, and pick the right string commands (SET, GET, INCR, SET NX EX)
+        for a given task.
+    - id: atomicity-lost-updates
+      title: Atomicity and lost updates
+      prereqs:
+      - redis-core-model
+      est_minutes: 20
+      concept_type: systems
+      objective_level: analyze
+      mastery_statement: You can diagnose a lost-update bug in a GET-then-SET sequence under concurrent
+        clients and replace it with an atomic single command.
+    - id: hashes-field-updates
+      title: Hashes and field-level updates
+      prereqs:
+      - atomicity-lost-updates
+      est_minutes: 15
+      concept_type: api
+      objective_level: apply
+      mastery_statement: You can model an object as a hash and use HSET, HGET and HINCRBY to update individual
+        fields atomically instead of rewriting a serialized blob.
+    - id: multi-step-atomicity
+      title: WATCH/MULTI and Lua scripts
+      prereqs:
+      - atomicity-lost-updates
+      - hashes-field-updates
+      est_minutes: 20
+      concept_type: api
+      objective_level: evaluate
+      mastery_statement: You can choose between WATCH/MULTI/EXEC and a Lua script to make a multi-step
+        read-modify-write atomic, and justify the choice.
+    - id: lists-sets
+      title: Lists and sets
+      prereqs:
+      - redis-core-model
+      est_minutes: 15
+      concept_type: api
+      objective_level: apply
+      mastery_statement: You can select between lists and sets for queues, uniqueness and membership problems,
+        and state the time complexity of their core commands.
+    - id: sorted-set-rank-range
+      title: 'Sorted sets: rank and range'
+      prereqs:
+      - lists-sets
+      est_minutes: 20
+      concept_type: algorithm
+      objective_level: apply
+      mastery_statement: You can build a leaderboard with ZADD, ZRANK, ZRANGE and ZRANGEBYSCORE and state
+        the complexity of each command.
+    - id: hyperloglog-vs-set
+      title: HyperLogLog vs. sets
+      prereqs:
+      - lists-sets
+      est_minutes: 15
+      concept_type: math
+      objective_level: evaluate
+      mastery_statement: You can compare HyperLogLog and sets for counting unique items, weighing fixed
+        memory and approximate counts against exact counts and membership queries.
+    - id: structure-selection-tradeoffs
+      title: Choosing structures and explaining tradeoffs
+      prereqs:
+      - multi-step-atomicity
+      - sorted-set-rank-range
+      - hyperloglog-vs-set
+      - redis-core-model
+      - hashes-field-updates
+      - lists-sets
+      est_minutes: 40
+      concept_type: conceptual
+      objective_level: create
+      mastery_statement: You can design a data model for a realistic workload, choosing among strings,
+        hashes, sets, sorted sets and HyperLogLog, and defend the tradeoffs in atomicity, memory and command
+        cost to a colleague.
+    sequence:
+    - redis-core-model
+    - atomicity-lost-updates
+    - hashes-field-updates
+    - multi-step-atomicity
+    - lists-sets
+    - sorted-set-rank-range
+    - hyperloglog-vs-set
+    - structure-selection-tradeoffs
+    sequence_rationale: You start with the single-threaded model and strings because the assessment put
+      you at novice level, and every later concept depends on them. Next come atomicity, hashes and WATCH/Lua,
+      which cover your first two gaps and the work-critical concurrency issues. Then lists and sets lead
+      into sorted sets and HyperLogLog, which cover your rank/range and counting gaps, and into big-key
+      operations. The final design concept ties these together so you can pick structures and defend the
+      tradeoffs at work.
+org:
+  title: Acme AI tech onboarding for new hires
+  config:
+    topic: Acme AI tech onboarding for new hires
+    formats:
+    - reading
+    - quizzes
+    - hands_on
+    self_level: intermediate
+    target_hours: 3.0
+    target_level: intermediate
+  mission:
+    goal: Acme AI tech onboarding for new hires
+    mode: foundation
+    deadline: null
+    expert_means: I can apply it confidently at work and explain the tradeoffs to a colleague.
+    analogy_domain: null
+  template_plan:
+    concepts:
+    - id: request-path
+      title: Request path through the platform
+      remedy: null
+      prereqs: []
+      est_minutes: 15
+      concept_type: systems
+      objective_level: understand
+      mastery_statement: You can trace a customer request from inference-gateway through model-router
+        to Postgres, Redis and Kafka and state what each service owns.
+    - id: failure-behaviour
+      title: Dependency failure behaviour
+      remedy: null
+      prereqs:
+      - request-path
+      est_minutes: 15
+      concept_type: systems
+      objective_level: apply
+      mastery_statement: You can predict what customers see and what the system does when Redis, Kafka,
+        a Postgres replica, the primary or the model-router pool fails.
+    - id: pr-and-review
+      title: Pull requests and review
+      remedy: null
+      prereqs: []
+      est_minutes: 15
+      concept_type: conceptual
+      objective_level: apply
+      mastery_statement: You can prepare a PR that follows the branch, scope, template and approval rules,
+        including when a second approval is required.
+    - id: ci-pipeline
+      title: CI stages and flaky tests
+      remedy: null
+      prereqs:
+      - pr-and-review
+      est_minutes: 15
+      concept_type: systems
+      objective_level: understand
+      mastery_statement: You can explain what each CI stage checks and handle a flaky test the way the
+        process requires instead of retrying until green.
+    - id: progressive-deploys
+      title: Progressive deploys and freezes
+      remedy: null
+      prereqs:
+      - ci-pipeline
+      est_minutes: 20
+      concept_type: systems
+      objective_level: apply
+      mastery_statement: You can describe the staging, canary and rollout steps and decide whether a deploy
+        is allowed given the freeze rules.
+    - id: rollback-and-flags
+      title: Rollback and feature flags
+      remedy: null
+      prereqs:
+      - progressive-deploys
+      est_minutes: 15
+      concept_type: api
+      objective_level: apply
+      mastery_statement: You can choose between rolling back and using a feature flag for a risky change
+        and run the rollback command correctly.
+    - id: database-changes
+      title: Safe database migrations
+      remedy: null
+      prereqs:
+      - progressive-deploys
+      est_minutes: 15
+      concept_type: conceptual
+      objective_level: apply
+      mastery_statement: You can plan an expand-then-contract migration that works with old and new code
+        and identify when the data platform team must review it.
+    - id: triage-and-severity
+      title: Paging, severity and triage
+      remedy: null
+      prereqs:
+      - failure-behaviour
+      - rollback-and-flags
+      est_minutes: 20
+      concept_type: systems
+      objective_level: analyze
+      mastery_statement: You can assign a severity to an incident and choose the first triage steps and
+        permitted mitigations for a gateway 5xx or latency symptom.
+    - id: incident-postmortem
+      title: Diagnosing the pool exhaustion incident
+      remedy: null
+      prereqs:
+      - triage-and-severity
+      - request-path
+      est_minutes: 25
+      concept_type: conceptual
+      objective_level: evaluate
+      mastery_statement: You can diagnose how a release and a traffic spike combined to exhaust the pool
+        and evaluate the tradeoffs of the postmortem's action items, such as PgBouncer versus larger pools.
+    sequence:
+    - request-path
+    - failure-behaviour
+    - pr-and-review
+    - ci-pipeline
+    - progressive-deploys
+    - rollback-and-flags
+    - database-changes
+    - triage-and-severity
+    - incident-postmortem
+    test_out: []
+    sequence_rationale: This path is drawn from the service map, the how-we-ship guide, the on-call runbook
+      and the pool-exhaustion postmortem. It starts with the service map because every other document
+      assumes you know how a request flows and what depends on what. Next comes the shipping path (PRs,
+      CI, deploys, rollback, migrations), then on-call triage. It ends with the postmortem, which asks
+      you to combine pool math, deploys and triage to evaluate a real incident and its fixes.
+  doc_slugs:
+  - how-we-ship
+  - on-call-runbook
+  - postmortem-pool-exhaustion
+  - service-map
