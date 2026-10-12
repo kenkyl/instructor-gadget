@@ -16,7 +16,7 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 - **PC2.4, quiz + grading:** `design-assessment` (4 transfer MCQs, each distractor tagged with the belief it represents, plus an explain item with a rubric; keys, tags and rubric never leave the server before submission), `grade` (1–4; a 4 requires transfer, enforced by a validator), the shared vs targeted quiz split (ADR-0021), misconception logging from picked distractors and the grader.
 - **PC2.5, adaptation:** `pedagogy.adapt` (the branch table), remediation inserted as a new prerequisite (ADR-0022), `remediate` (`explain_change` writes the why and the remediation concept, `lesson` streams its lesson, never cached), plan versions with a diff and a why, and the plan-history UI.
 - **PC2.6, gate + test-out:** override with an LLM-written, specific warning (logged, a plan version), test-out after a 4 (a plan version; the next concept's quiz without its lesson, ADR-0006), course completion, and 8 draft grader answers for Kyle to label (`backend/evals/grader_calibration.yaml`).
-- **Numbers (live, one learner, end to end):** lesson first text 1.3 s, full lesson ~13 s ($0.02); quiz design 17–24 s ($0.035, the slowest call, so it's prefetched while the learner reads); grading 2.4–3 s; a bad attempt → remediation + why in 9 s. A full J1 + J2 pass (course, 3 lessons, 5 quizzes, 3 grades, remediation, override) cost about **$0.27**. 157 deterministic tests.
+- **Numbers (live, one learner, end to end):** lesson first text 1.3 s, full lesson ~13 s ($0.02); quiz design 17–24 s ($0.035, the slowest call, so it's prefetched while the learner reads); grading 2.4–3 s; a bad attempt → remediation + why in 9 s. A full J1 + J2 pass (course, 3 lessons, 5 quizzes, 3 grades, remediation, override) cost about **$0.27**. 158 deterministic tests.
 
 **Key prompts**
 - "We're speeding up for time. Skip my turn, do it yourself, verify, then give me brief answers to the check questions." The AI wrote the PC2.1–PC2.5 ★ pieces against the pre-written tests; Kyle's open ★ is labelling the 8 grader answers.
@@ -34,6 +34,7 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
   - **Dependencies:** Kyle approved `mermaid` and `react-markdown`. Partial JSON parsing uses `pydantic_core.from_json`, so the backend has no new dependency.
 - **PC2.4, a prompt bug that only a live run showed:** the first live quiz's explain item said "apply it to the situation described", but the situation lived in `transfer_situation`, which the learner never sees. The 4-point rubric expected numbers (12 cores, 40 ms) the learner couldn't know, so a 4 was impossible. The fake-LLM tests passed. Fix: the skill now says the learner sees only `prompt` and options, every prompt is self-contained, and the rubric may only expect facts the prompt gives. Re-run live: the explain prompt carried every number.
 - **PC2.4, the AI's own test fixture was wrong:** a test retook a remediation quiz with an untargeted quiz, but the picked distractors had already logged beliefs, so the service correctly chose `design_targeted` and the fixture failed its validator. The test was fixed, not the code.
+- **Caught in Kyle's walkthrough, missed by the AI's tests and live run:** Kyle overrode a locked concept, then failed it. The inserted remediation took the concept's unmet prereqs, so it sat locked behind the gate Kyle had already skipped, while the failed concept stayed open (plan v3's diff had no status change). The fix: a remediation for an overridden concept inherits the override (ADR-0022), with a regression test. The AI had tested override and remediation separately, never together.
 - **Shell slip during live checks:** a zsh loop variable named `path` clobbered `PATH`, so a whole verification loop printed "command not found". Renamed and rerun; nothing else was affected.
 
 **Tradeoffs accepted**
@@ -44,7 +45,7 @@ One entry per checkpoint. Each entry covers what we built, the key prompts and d
 
 **Kyle's ★:** PC2.1 and PC2.3/2.5 ★s were done by the AI at Kyle's request (time). Open: label the 8 grader answers before CP5.
 
-**How to verify:** `make up && make migrate && make seed && make test` (157 pass). Then `make dev`, log in as kyle, and follow "Test J2" in the PR description.
+**How to verify:** `make up && make migrate && make seed && make test` (158 pass). Then `make dev`, log in as kyle, and follow "Test J2" in the PR description.
 
 ## CP1: Create a course (Sun 2026-10-11, PR #2)
 
