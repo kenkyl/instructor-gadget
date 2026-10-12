@@ -248,3 +248,29 @@ def test_hands_on_pool_lesson_shows_the_seeded_prototype(client, fake_llm: FakeA
 
     assert done["prototype"]["slug"] == "conn-pool-sim"
     assert done["prototype"]["html"].startswith("<!doctype html>")
+
+
+def test_remediation_of_an_overridden_concept_is_open(client, fake_llm: FakeAnthropic) -> None:
+    """The remedy takes the overridden concept's unmet prereqs; the override must cover it too,
+    or the learner is sent to a locked remediation while the failed concept stays open."""
+    eid = _enrollment(client, fake_llm)
+    warning = "You'll misread TTL expiry."
+    fake_llm.reply(message({"what_will_break": warning}))
+    client.get(f"/api/enrollments/{eid}/concepts/ttls/override")
+    client.post(f"/api/enrollments/{eid}/concepts/ttls/override", json={"warning": warning})
+    fake_llm.reply(message(GOOD_LESSON))
+    _open(client, eid, "ttls")
+    fake_llm.reply(message(QUIZ))
+    attempt = _quiz(client, eid, "ttls").json()["attempt_id"]
+    fake_llm.reply(message(grade(1)), message(EXPLAIN))
+
+    result = _submit(client, eid, attempt, WRONG).json()
+
+    remedy = result["diff"]["added"][0]["id"]
+    assert remedy == "ttls-remedy-1"
+    status = {
+        p["concept_id"]: p["status"]
+        for p in client.get(f"/api/enrollments/{eid}").json()["progress"]
+    }
+    assert status[remedy] == "unlocked" and status["ttls"] == "in_progress"
+    assert result["next_concept"]["concept_id"] == "cache-aside"  # earlier in sequence, open

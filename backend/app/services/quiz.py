@@ -549,18 +549,25 @@ def _apply_gate(
     Locked concepts whose prereqs are now all solid unlock. An open concept whose prereqs are
     no longer all solid (a remediation was just inserted before it) re-locks, unless the learner
     overrode the gate for it. Complete concepts stay complete.
+
+    A remediation for an overridden concept inherits the override: it takes that concept's
+    unmet prereqs, so without this it would be locked behind the very gate the learner already
+    chose to skip, while the concept it remediates stays open.
     """
     bands = {cid: p.band for cid, p in rows.items()}
     passes = pedagogy.unlocked(cmap.graph(), bands)
+    exempt = overridden | {
+        c.id for c in cmap.concepts if c.remedy and c.remedy.for_concept in overridden
+    }
     changes: list[StatusChange] = []
     for cid in cmap.sequence:
         p = rows.get(cid)
         if p is None or p.status == ConceptStatus.complete:
             continue
         new = p.status
-        if p.status == ConceptStatus.locked and cid in passes:
+        if p.status == ConceptStatus.locked and (cid in passes or cid in exempt - overridden):
             new = ConceptStatus.unlocked
-        elif p.status != ConceptStatus.locked and cid not in passes and cid not in overridden:
+        elif p.status != ConceptStatus.locked and cid not in passes and cid not in exempt:
             new = ConceptStatus.locked
         if new != p.status:
             changes.append(StatusChange(concept_id=cid, old=p.status, new=new))

@@ -279,6 +279,7 @@ Format: **Context**, then **Decision**, **Alternatives**, **Consequences**, and 
 **Context:** §4.8 inserts a remediation concept after a score of 1–2 and says every plan change creates a new version. We have to decide where the remediation goes, how the learner gets back to the original, and which events count as "plan changes" (unlocking happens after almost every quiz).
 **Decision:**
 - The remediation concept (`{id}-remedy-{n}`) is inserted **before** the failed concept, takes its prereqs, and becomes a new prereq of it. The existing gate then does the rest: the remedy unlocks, the original re-locks, and when the remedy is solid the original reopens for a retake. `pedagogy.adapt` caps remediations at 2 per concept (`MAX_REMEDIATIONS`); after that a low score asks for a retake (no endless loops).
+- A remediation for an overridden concept inherits the override: it would otherwise take the concept's unmet prereqs and sit locked behind the gate the learner already skipped.
 - Plan-state fields set by code (`Concept.remedy`, `ConceptMap.test_out`) are hidden from the model's output schema (`SkipJsonSchema`), so `map-concepts` can't set them.
 - New plan versions only for **structural** changes: an inserted remediation, an accepted test-out, an override. Unlocks and completions are progress state, reported in the result and the diff's `status_changes`, not versions of their own.
 - A picked MCQ distractor logs its tagged misconception deterministically. The grader adds one from the short answer, and that one is listed first.
