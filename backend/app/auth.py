@@ -82,7 +82,15 @@ async def get_current_user(
                     "display_name": data["display_name"],
                 }
             )
-    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not logged in")
+    # A stale cookie (session expired, or Redis wiped) must not outlive the 401: the web proxy
+    # bounces /login back to / while a `sid` cookie exists, and JS can't clear an HttpOnly one.
+    secure = "; Secure" if get_settings().cookie_secure else ""
+    headers = (
+        {"Set-Cookie": f"{SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=lax{secure}"}
+        if sid
+        else None
+    )
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not logged in", headers=headers)
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]

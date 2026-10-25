@@ -13,6 +13,19 @@ def test_me_requires_login(client) -> None:
     assert client.get("/api/me").status_code == 401
 
 
+def test_stale_session_cookie_is_cleared_on_401(client) -> None:
+    # Cookie present but no Redis session: without clearing it the web proxy would bounce
+    # /login back to / forever.
+    client.cookies.set(SESSION_COOKIE, "no-such-session")
+    resp = client.get("/api/me")
+    assert resp.status_code == 401
+    assert "Max-Age=0" in resp.headers["set-cookie"]
+
+    # No cookie at all: nothing to clear.
+    client.cookies.clear()
+    assert "set-cookie" not in client.get("/api/me").headers
+
+
 def test_unknown_user_cannot_log_in(client) -> None:
     assert client.post("/api/auth/login", json={"username": "mallory"}).status_code == 404
 
